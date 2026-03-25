@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>🏀 AI Shot Tracker</title>
+<title>AI Shot Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ff6b1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Shot Tracker">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
@@ -20,6 +27,7 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
 .small-btn { background: #13131e; border: 1px solid #1e1e2e; color: #5a5a7a; border-radius: 8px; padding: 5px 13px; font-size: 13px; cursor: pointer; font-family: inherit; transition: background .15s; }
 .small-btn:hover { background: #1e1e2e; }
 .small-btn.danger { color: #ef4444; }
+.small-btn.accent { color: #ff6b1a; border-color: #ff6b1a33; }
 
 /* ── STATS BAR ── */
 #stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #1e1e2e; }
@@ -92,6 +100,41 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
 /* ── EMPTY ── */
 #empty { text-align: center; padding: 24px 24px 32px; color: #5a5a7a; font-size: 15px; line-height: 1.7; }
 #empty .big { font-size: 38px; margin-bottom: 8px; }
+
+/* ── SUMMARY PANEL ── */
+.summary-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 99; opacity: 1; transition: opacity .3s; }
+.summary-overlay.hidden { opacity: 0; pointer-events: none; }
+.summary-panel { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); max-width: 480px; width: 100%; background: #0f0f18; border-top: 2px solid #ff6b1a; border-radius: 20px 20px 0 0; max-height: 88dvh; overflow-y: auto; z-index: 100; transition: transform .35s cubic-bezier(.22,1,.36,1); }
+.summary-panel.hidden { transform: translateX(-50%) translateY(100%); }
+.sum-handle { width: 40px; height: 4px; background: #2a2a3e; border-radius: 2px; margin: 10px auto; }
+.sum-content { padding: 0 20px 28px; }
+.sum-content h2 { font-size: 14px; letter-spacing: 3px; color: #5a5a7a; text-align: center; margin-bottom: 16px; }
+.sum-hero { text-align: center; margin-bottom: 18px; }
+.sum-hero-pct { font-size: 64px; font-weight: 900; line-height: 1; }
+.sum-hero-lbl { font-size: 13px; color: #5a5a7a; letter-spacing: 2px; margin-top: 4px; }
+.sum-stats { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; background: #1e1e2e; border-radius: 12px; overflow: hidden; margin-bottom: 16px; }
+.sum-stat { background: #12121c; padding: 12px 4px; text-align: center; }
+.sum-stat-val { font-size: 20px; font-weight: 900; }
+.sum-stat-lbl { font-size: 10px; color: #5a5a7a; letter-spacing: 1.5px; margin-top: 2px; }
+.sum-section { margin-bottom: 14px; }
+.sum-section-title { font-size: 11px; color: #5a5a7a; letter-spacing: 2px; margin-bottom: 8px; }
+.sum-streak-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1a1a28; font-size: 15px; }
+.sum-streak-row span:last-child { font-weight: 800; }
+#sum-chart { width: 100%; height: 130px; background: #12121c; border-radius: 10px; border: 1px solid #1e1e2e; }
+.sum-bd-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #1a1a28; }
+.sum-bd-type { font-size: 14px; font-weight: 800; color: #ff6b1a; width: 36px; }
+.sum-bd-bar { flex: 1; background: #1e1e2e; border-radius: 4px; height: 8px; overflow: hidden; }
+.sum-bd-bar-fill { height: 100%; border-radius: 4px; }
+.sum-bd-info { font-size: 15px; font-weight: 800; width: 80px; text-align: right; }
+.sum-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
+.sum-btn-share { background: #ff6b1a; border: none; color: #fff; border-radius: 14px; padding: 14px 24px; font-size: 17px; font-weight: 900; cursor: pointer; font-family: inherit; letter-spacing: 1px; box-shadow: 0 4px 20px rgba(255,107,26,.3); }
+.sum-btn-close { background: #1e1e2e; border: none; color: #5a5a7a; border-radius: 14px; padding: 12px 24px; font-size: 15px; cursor: pointer; font-family: inherit; }
+
+/* ── INSTALL BANNER ── */
+#install-bar { display: none; padding: 10px 16px; background: #12121c; border-bottom: 1px solid #1e1e2e; align-items: center; gap: 10px; }
+#install-bar span { flex: 1; font-size: 13px; color: #5a5a7a; }
+#install-bar button { background: #ff6b1a; border: none; color: #fff; border-radius: 8px; padding: 6px 16px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+#install-bar .dismiss { background: none; color: #5a5a7a; padding: 6px; }
 </style>
 </head>
 <body>
@@ -101,9 +144,18 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
   <div id="header">
     <div id="title"><span>🏀</span> Shot Tracker</div>
     <div id="undo-area">
+      <button class="small-btn accent" id="btn-summary" style="display:none">Stats</button>
+      <button class="small-btn" id="btn-sound" title="Toggle sound">🔊</button>
       <button class="small-btn" id="btn-undo" style="display:none">↩ Undo</button>
       <button class="small-btn danger" id="btn-reset" style="display:none">Reset</button>
     </div>
+  </div>
+
+  <!-- INSTALL BANNER -->
+  <div id="install-bar">
+    <span>Install app for the best experience</span>
+    <button id="btn-install">Install</button>
+    <button class="dismiss" id="btn-dismiss-install">✕</button>
   </div>
 
   <!-- STATS BAR -->
@@ -125,18 +177,18 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
       <div id="cam-error-msg"></div>
     </div>
     <div id="shot-flash"></div>
-    <div id="make-popup">MAKE! 🔥</div>
-    <div id="auto-badge">🤖 AUTO</div>
+    <div id="make-popup">MAKE!</div>
+    <div id="auto-badge">AUTO</div>
     <div id="live-fg-box">
       <span id="live-pct">—</span><span id="live-count">0/0</span>
     </div>
-    <div id="hoop-hint">👆 TAP to place hoop marker</div>
+    <div id="hoop-hint">TAP to place hoop marker</div>
   </div>
 
   <!-- MODEL STATUS -->
   <div id="model-status">
     <div class="status-dot s-loading" id="sdot"></div>
-    <span id="stext">Loading AI ball-detection model…</span>
+    <span id="stext">Loading AI ball-detection model...</span>
   </div>
 
   <!-- CONTROLS -->
@@ -168,7 +220,7 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
     <strong style="color:#f0f0f8">How it works:</strong><br>
     1. Enable camera · point at the hoop<br>
     2. Tap <em>Set Hoop</em> · tap the hoop on screen<br>
-    3. AI auto-detects 🤖 <strong style="color:#a855f7">makes</strong> — tap ✕ MISS manually<br>
+    3. AI auto-detects <strong style="color:#a855f7">makes</strong> — tap ✕ MISS manually<br>
     4. Or use both buttons any time
   </div>
 
@@ -178,6 +230,37 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
   </div>
 
 </div>
+
+<!-- SUMMARY PANEL -->
+<div class="summary-overlay hidden" id="sum-overlay"></div>
+<div class="summary-panel hidden" id="sum-panel">
+  <div class="sum-handle"></div>
+  <div class="sum-content">
+    <h2>SESSION SUMMARY</h2>
+    <div class="sum-hero">
+      <div class="sum-hero-pct" id="sum-pct">—</div>
+      <div class="sum-hero-lbl">FIELD GOAL %</div>
+    </div>
+    <div class="sum-stats" id="sum-stats"></div>
+    <div class="sum-section">
+      <div class="sum-section-title">STREAKS</div>
+      <div id="sum-streaks"></div>
+    </div>
+    <div class="sum-section">
+      <div class="sum-section-title">ROLLING FG%</div>
+      <canvas id="sum-chart"></canvas>
+    </div>
+    <div class="sum-section">
+      <div class="sum-section-title">BREAKDOWN</div>
+      <div id="sum-breakdown"></div>
+    </div>
+    <div class="sum-actions">
+      <button class="sum-btn-share" id="btn-share">Share as Image</button>
+      <button class="sum-btn-close" id="btn-close-sum">Close</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── GLOBALS ──────────────────────────────────────────────────────────────
 let tfModel = null, modelReady = false;
@@ -189,11 +272,13 @@ let settingHoop = false;
 let ballHistory = []; // [{cx,cy,ts}] canvas-px
 let lastBall = null;  // {cx,cy,r,score,ts}
 let lastAutoTs = 0;
+let sessionStartTs = null;
 const COOLDOWN = 2800;
-const DETECT_EVERY = 5; // model inference every N frames
-const HOOP_R_NORM = 0.09; // hoop radius as fraction of canvas width
+let detectInterval = 5; // adaptive: 2 when ball seen, 6 when idle
+const HOOP_R_NORM = 0.09;
 let detecting = false;
 let autoActive = false;
+let soundOn = true;
 
 // ── DOM REFS ─────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -201,13 +286,66 @@ const video  = $('video');
 const canvas = $('overlay-canvas');
 const ctx    = canvas.getContext('2d');
 
+// ── SOUND (Web Audio API) ────────────────────────────────────────────────
+let audioCtx = null;
+function ensureAudio() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playSwish() {
+  if (!soundOn) return;
+  try {
+    ensureAudio();
+    const dur = 0.3;
+    const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * dur, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      const t = i / audioCtx.sampleRate;
+      const env = Math.exp(-t * 12);
+      data[i] = (Math.random() * 2 - 1) * env;
+    }
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 4000;
+    filter.Q.value = 1.2;
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.35;
+    src.connect(filter).connect(gain).connect(audioCtx.destination);
+    src.start();
+  } catch(e){}
+}
+
+function playBuzz() {
+  if (!soundOn) return;
+  try {
+    ensureAudio();
+    const osc = audioCtx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.value = 150;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+  } catch(e){}
+}
+
+$('btn-sound').onclick = () => {
+  soundOn = !soundOn;
+  $('btn-sound').textContent = soundOn ? '🔊' : '🔇';
+};
+
 // ── MODEL ────────────────────────────────────────────────────────────────
 (async () => {
   try {
-    setStatus('loading','Loading AI model — may take ~10s on first visit…');
+    setStatus('loading','Loading AI model — may take ~10s on first visit...');
     tfModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
     modelReady = true;
-    setStatus('ready','🤖 AI ready · set hoop for auto-detection');
+    setStatus('ready','AI ready · set hoop for auto-detection');
   } catch(e) {
     setStatus('off','AI unavailable · use manual buttons');
   }
@@ -224,6 +362,7 @@ $('btn-camera').onclick = () => camOn ? stopCamera() : startCamera();
 
 async function startCamera() {
   try {
+    ensureAudio(); // unlock audio on user gesture
     camStream = await navigator.mediaDevices.getUserMedia({
       video:{ facingMode:{ideal:'environment'}, width:{ideal:1080}, height:{ideal:1920}, aspectRatio:{ideal:9/16} },
       audio:false
@@ -287,7 +426,7 @@ canvas.addEventListener('click', e => {
   canvas.style.cursor = 'default';
   autoActive = true;
   $('auto-badge').style.display = 'block';
-  setStatus('ready','🎯 Hoop set · auto-detecting makes');
+  setStatus('ready','Hoop set · auto-detecting makes');
 });
 
 // ── DETECTION LOOP ───────────────────────────────────────────────────────
@@ -298,16 +437,13 @@ function startLoop() {
     if (!video.readyState || video.readyState < 2) return;
     if (canvas.width < 10) resizeCanvas();
 
-    // Draw video frame
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    // Draw overlays
     drawTrail();
     if (lastBall && Date.now()-lastBall.ts < 600) drawBallCircle();
     drawHoop();
 
-    // Run AI inference every N frames
-    if (modelReady && frameN % DETECT_EVERY === 0) runDetect();
+    // Adaptive detection frequency
+    if (modelReady && frameN % detectInterval === 0) runDetect();
   }
   tick();
 }
@@ -317,7 +453,13 @@ async function runDetect() {
   detecting = true;
   try {
     const preds = await tfModel.detect(video);
-    const balls = preds.filter(p => p.class==='sports ball' && p.score > 0.35);
+    // Dynamic threshold: lower for small (distant) balls
+    const balls = preds.filter(p => {
+      if (p.class !== 'sports ball') return false;
+      const area = p.bbox[2] * p.bbox[3];
+      const minScore = area < 2500 ? 0.20 : 0.30;
+      return p.score > minScore;
+    });
     if (balls.length) {
       const b = balls.reduce((a,c)=>c.score>a.score?c:a);
       const [bx,by,bw,bh] = b.bbox;
@@ -329,8 +471,12 @@ async function runDetect() {
       lastBall = { cx, cy, r, score:b.score, ts:Date.now() };
       addHistory(cx, cy);
       checkMake();
+      detectInterval = 2; // track more aggressively when ball visible
     } else {
-      if (lastBall && Date.now()-lastBall.ts > 1200) lastBall = null;
+      if (lastBall && Date.now()-lastBall.ts > 1200) {
+        lastBall = null;
+        detectInterval = 6; // conserve CPU when no ball
+      }
     }
   } catch(e){}
   detecting = false;
@@ -339,28 +485,52 @@ async function runDetect() {
 // ── BALL HISTORY ─────────────────────────────────────────────────────────
 function addHistory(cx, cy) {
   const now = Date.now();
-  ballHistory = ballHistory.filter(p=>now-p.ts<1600);
+  ballHistory = ballHistory.filter(p=>now-p.ts<2500);
   ballHistory.push({cx, cy, ts:now});
-  if (ballHistory.length > 40) ballHistory.shift();
+  if (ballHistory.length > 60) ballHistory.shift();
+}
+
+// ── TRAJECTORY PREDICTION ────────────────────────────────────────────────
+function predictBall() {
+  if (ballHistory.length < 3) return null;
+  const pts = ballHistory.slice(-5);
+  let vx = 0, vy = 0, count = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const dt = (pts[i].ts - pts[i-1].ts) / 1000;
+    if (dt <= 0 || dt > 0.5) continue;
+    vx += (pts[i].cx - pts[i-1].cx) / dt;
+    vy += (pts[i].cy - pts[i-1].cy) / dt;
+    count++;
+  }
+  if (!count) return null;
+  vx /= count; vy /= count;
+  const last = pts[pts.length-1];
+  const dt = 0.15; // predict 150ms ahead
+  return { cx: last.cx + vx*dt, cy: last.cy + vy*dt, ts: last.ts + 150 };
 }
 
 // ── AUTO MAKE CHECK ──────────────────────────────────────────────────────
 function checkMake() {
   if (!hoop || Date.now()-lastAutoTs < COOLDOWN) return;
   if (ballHistory.length < 3) return;
-  const recent = ballHistory.filter(p=>Date.now()-p.ts<1000);
-  if (recent.length < 2) return;
+
+  // Build points to check: recent actual + predicted
+  const recent = ballHistory.filter(p=>Date.now()-p.ts<1500);
+  const predicted = predictBall();
+  const pts = predicted ? [...recent, predicted] : recent;
+  if (pts.length < 2) return;
+
   const hx = hoop.nx * canvas.width;
   const hy = hoop.ny * canvas.height;
-  const hr = HOOP_R_NORM * canvas.width;
+  const hr = HOOP_R_NORM * canvas.width * 1.2; // slightly wider tolerance
 
-  for (let i=1; i<recent.length; i++) {
-    const p1=recent[i-1], p2=recent[i];
+  for (let i=1; i<pts.length; i++) {
+    const p1=pts[i-1], p2=pts[i];
     if (p2.cy <= p1.cy) continue;             // must move downward
     if (p1.cy >= hy    || p2.cy < hy) continue; // must cross hoop y
     const t = (hy - p1.cy) / (p2.cy - p1.cy);
     const crossX = p1.cx + t*(p2.cx-p1.cx);
-    if (Math.abs(crossX - hx) < hr) {          // within hoop width
+    if (Math.abs(crossX - hx) < hr) {
       lastAutoTs = Date.now();
       logShot(true, true);
       popMake();
@@ -375,19 +545,15 @@ function drawHoop() {
   const hx = hoop.nx*canvas.width, hy = hoop.ny*canvas.height;
   const hr = HOOP_R_NORM*canvas.width;
   ctx.save();
-  // glow
   ctx.beginPath(); ctx.arc(hx,hy,hr*1.4,0,Math.PI*2);
   ctx.strokeStyle='rgba(255,107,26,.12)'; ctx.lineWidth=16; ctx.stroke();
-  // ring
   ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2);
   ctx.strokeStyle = autoActive ? '#ff6b1a' : '#4a4a6a';
   ctx.lineWidth=3; ctx.setLineDash([7,5]); ctx.stroke(); ctx.setLineDash([]);
-  // inner cross
   ctx.beginPath();
   ctx.moveTo(hx-10,hy); ctx.lineTo(hx+10,hy);
   ctx.moveTo(hx,hy-10); ctx.lineTo(hx,hy+10);
   ctx.strokeStyle='rgba(255,107,26,.7)'; ctx.lineWidth=2; ctx.stroke();
-  // label
   ctx.fillStyle='#ff6b1a'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
   ctx.fillText('HOOP', hx, hy-hr-7);
   ctx.restore();
@@ -409,25 +575,24 @@ function drawTrail() {
 function drawBallCircle() {
   const {cx,cy,r,score} = lastBall;
   ctx.save();
-  // detection ring
   ctx.beginPath(); ctx.arc(cx,cy,r+6,0,Math.PI*2);
   ctx.strokeStyle=`rgba(255,140,60,${score.toFixed(2)})`; ctx.lineWidth=3; ctx.stroke();
-  // crosshair
   const s=r*0.55;
   ctx.beginPath();
   ctx.moveTo(cx-s,cy); ctx.lineTo(cx+s,cy);
   ctx.moveTo(cx,cy-s); ctx.lineTo(cx,cy+s);
   ctx.strokeStyle=`rgba(255,255,255,${(score*.6).toFixed(2)})`; ctx.lineWidth=1.5; ctx.stroke();
-  // label
   ctx.fillStyle='#ffad70'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
-  ctx.fillText(`🏀 ${Math.round(score*100)}%`, cx, cy-r-10);
+  ctx.fillText(`${Math.round(score*100)}%`, cx, cy-r-10);
   ctx.restore();
 }
 
 // ── SHOT LOGGING ─────────────────────────────────────────────────────────
 function logShot(made, auto=false) {
+  if (!sessionStartTs) sessionStartTs = Date.now();
   shots.push({ made, type:selType, ts:Date.now(), auto });
   flashScreen(made);
+  if (made) playSwish(); else playBuzz();
   updateUI();
 }
 
@@ -447,7 +612,7 @@ function popMake() {
 $('btn-make').onclick = ()=>{ logShot(true);  popMake(); };
 $('btn-miss').onclick = ()=>  logShot(false);
 $('btn-undo').onclick = ()=>{ shots.pop(); updateUI(); };
-$('btn-reset').onclick= ()=>{ if(confirm('Reset session?')){ shots=[]; updateUI(); } };
+$('btn-reset').onclick= ()=>{ if(confirm('Reset session?')){ shots=[]; sessionStartTs=null; updateUI(); } };
 
 // ── UI UPDATE ────────────────────────────────────────────────────────────
 function updateUI() {
@@ -466,6 +631,7 @@ function updateUI() {
 
   $('btn-undo').style.display = total>0?'':'none';
   $('btn-reset').style.display= total>0?'':'none';
+  $('btn-summary').style.display = total>0?'':'none';
   $('empty').style.display    = total===0?'':'none';
 
   // streak
@@ -475,7 +641,7 @@ function updateUI() {
     for(let i=total-1;i>=0;i--){ if(shots[i].made===last) streak++; else break; }
     if (streak<2) { $('streak-bar').style.display='none'; return; }
     $('streak-bar').style.display='';
-    $('streak-bar').textContent = last ? `🔥 ${streak} in a row!` : `❄️ ${streak}-miss run`;
+    $('streak-bar').textContent = last ? `${streak} in a row!` : `${streak}-miss run`;
     $('streak-bar').style.color = last?'#22c55e':'#ef4444';
   })();
 
@@ -510,6 +676,327 @@ document.querySelectorAll('.type-btn').forEach(b=>{
     selType=b.dataset.t;
   };
 });
+
+// ── SESSION SUMMARY ──────────────────────────────────────────────────────
+$('btn-summary').onclick = openSummary;
+$('btn-close-sum').onclick = closeSummary;
+$('sum-overlay').onclick = closeSummary;
+$('btn-share').onclick = shareSummary;
+
+function openSummary() {
+  if (!shots.length) return;
+  const total = shots.length;
+  const makes = shots.filter(s=>s.made).length;
+  const pct = Math.round(makes/total*100);
+  const pctColor = makes/total>=.5?'#22c55e':'#ff6b1a';
+  const elapsed = Date.now() - (sessionStartTs || shots[0].ts);
+  const mins = Math.floor(elapsed/60000);
+  const secs = Math.floor((elapsed%60000)/1000);
+  const duration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  // Hero
+  $('sum-pct').textContent = pct + '%';
+  $('sum-pct').style.color = pctColor;
+
+  // Stats grid
+  $('sum-stats').innerHTML = [
+    { v: makes, l: 'MAKES', c: '#22c55e' },
+    { v: total-makes, l: 'MISSES', c: '#ef4444' },
+    { v: total, l: 'SHOTS', c: '#f0f0f8' },
+    { v: duration, l: 'TIME', c: '#ff6b1a' },
+  ].map(s=>`<div class="sum-stat"><div class="sum-stat-val" style="color:${s.c}">${s.v}</div><div class="sum-stat-lbl">${s.l}</div></div>`).join('');
+
+  // Streaks
+  let bestMake=0, bestMiss=0, cur=0, curType=null;
+  for (const s of shots) {
+    if (s.made === curType) { cur++; }
+    else { cur = 1; curType = s.made; }
+    if (curType && cur > bestMake) bestMake = cur;
+    if (!curType && cur > bestMiss) bestMiss = cur;
+  }
+  const autoCount = shots.filter(s=>s.auto).length;
+  $('sum-streaks').innerHTML = [
+    ['Best make streak', bestMake, '#22c55e'],
+    ['Worst miss streak', bestMiss, '#ef4444'],
+    ['Auto-detected', autoCount, '#a855f7'],
+  ].map(([l,v,c])=>`<div class="sum-streak-row"><span>${l}</span><span style="color:${c}">${v}</span></div>`).join('');
+
+  // Rolling FG% chart
+  drawChart();
+
+  // Breakdown
+  $('sum-breakdown').innerHTML = ['2PT','3PT','FT'].map(t=>{
+    const ts=shots.filter(s=>s.type===t);
+    if(!ts.length) return '';
+    const m=ts.filter(s=>s.made).length, p=Math.round(m/ts.length*100);
+    const c=p>=50?'#22c55e':'#ff6b1a';
+    return `<div class="sum-bd-row">
+      <div class="sum-bd-type">${t}</div>
+      <div class="sum-bd-bar"><div class="sum-bd-bar-fill" style="width:${p}%;background:${c}"></div></div>
+      <div class="sum-bd-info" style="color:${c}">${p}% <span style="color:#5a5a7a;font-weight:400">${m}/${ts.length}</span></div>
+    </div>`;
+  }).join('');
+
+  $('sum-panel').classList.remove('hidden');
+  $('sum-overlay').classList.remove('hidden');
+}
+
+function closeSummary() {
+  $('sum-panel').classList.add('hidden');
+  $('sum-overlay').classList.add('hidden');
+}
+
+function drawChart() {
+  const c = $('sum-chart');
+  const dpr = window.devicePixelRatio || 1;
+  c.width = c.clientWidth * dpr;
+  c.height = c.clientHeight * dpr;
+  const cx = c.getContext('2d');
+  cx.scale(dpr, dpr);
+  const w = c.clientWidth, h = c.clientHeight;
+  const pad = { t:14, r:12, b:22, l:36 };
+  const gw = w-pad.l-pad.r, gh = h-pad.t-pad.b;
+
+  // Grid
+  cx.strokeStyle = '#1e1e2e'; cx.lineWidth = 1;
+  for (let p = 0; p <= 100; p += 25) {
+    const y = pad.t + gh - (p/100)*gh;
+    cx.beginPath(); cx.moveTo(pad.l, y); cx.lineTo(pad.l+gw, y); cx.stroke();
+    cx.fillStyle = '#3a3a5a'; cx.font = '10px sans-serif'; cx.textAlign = 'right';
+    cx.fillText(p+'%', pad.l-5, y+3);
+  }
+
+  // Data
+  if (shots.length < 2) return;
+  const pts = [];
+  let mk = 0;
+  for (let i = 0; i < shots.length; i++) {
+    if (shots[i].made) mk++;
+    pts.push(mk/(i+1)*100);
+  }
+
+  cx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    const x = pad.l + (i/(pts.length-1))*gw;
+    const y = pad.t + gh - (pts[i]/100)*gh;
+    i===0 ? cx.moveTo(x,y) : cx.lineTo(x,y);
+  }
+  cx.strokeStyle = '#ff6b1a'; cx.lineWidth = 2.5; cx.stroke();
+
+  // 50% line
+  const y50 = pad.t + gh/2;
+  cx.setLineDash([4,4]);
+  cx.beginPath(); cx.moveTo(pad.l,y50); cx.lineTo(pad.l+gw,y50);
+  cx.strokeStyle = '#22c55e44'; cx.lineWidth = 1; cx.stroke();
+  cx.setLineDash([]);
+
+  // Shot count label
+  cx.fillStyle = '#5a5a7a'; cx.font = '10px sans-serif'; cx.textAlign = 'center';
+  cx.fillText('1', pad.l, h-4);
+  cx.fillText(String(shots.length), pad.l+gw, h-4);
+}
+
+// ── SHARE AS IMAGE ───────────────────────────────────────────────────────
+async function shareSummary() {
+  const total = shots.length;
+  if (!total) return;
+  const makes = shots.filter(s=>s.made).length;
+  const pct = Math.round(makes/total*100);
+  const elapsed = Date.now() - (sessionStartTs || shots[0].ts);
+  const mins = Math.floor(elapsed/60000);
+  const secs = Math.floor((elapsed%60000)/1000);
+  const duration = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  // Create share canvas
+  const W = 1080, H = 1350;
+  const sc = document.createElement('canvas');
+  sc.width = W; sc.height = H;
+  const sx = sc.getContext('2d');
+
+  // Background
+  sx.fillStyle = '#08080f';
+  sx.fillRect(0, 0, W, H);
+
+  // Top accent bar
+  sx.fillStyle = '#ff6b1a';
+  sx.fillRect(0, 0, W, 6);
+
+  // Title
+  sx.fillStyle = '#ff6b1a';
+  sx.font = '900 42px "Barlow Condensed", sans-serif';
+  sx.textAlign = 'center';
+  sx.fillText('AI SHOT TRACKER', W/2, 72);
+
+  // Big FG%
+  const pctColor = makes/total>=.5?'#22c55e':'#ff6b1a';
+  sx.fillStyle = pctColor;
+  sx.font = '900 180px "Barlow Condensed", sans-serif';
+  sx.fillText(pct + '%', W/2, 260);
+  sx.fillStyle = '#5a5a7a';
+  sx.font = '700 28px "Barlow Condensed", sans-serif';
+  sx.fillText('FIELD GOAL PERCENTAGE', W/2, 300);
+
+  // Stats boxes
+  const statsY = 360;
+  const statItems = [
+    { v: String(makes), l: 'MAKES', c: '#22c55e' },
+    { v: String(total-makes), l: 'MISSES', c: '#ef4444' },
+    { v: String(total), l: 'SHOTS', c: '#f0f0f8' },
+    { v: duration, l: 'TIME', c: '#ff6b1a' },
+  ];
+  const bw = 220, gap = 30, startX = (W - (bw*4 + gap*3))/2;
+  for (let i = 0; i < 4; i++) {
+    const x = startX + i*(bw+gap);
+    sx.fillStyle = '#12121c';
+    sx.beginPath();
+    sx.roundRect(x, statsY, bw, 100, 14);
+    sx.fill();
+    sx.fillStyle = statItems[i].c;
+    sx.font = '900 42px "Barlow Condensed", sans-serif';
+    sx.textAlign = 'center';
+    sx.fillText(statItems[i].v, x+bw/2, statsY+48);
+    sx.fillStyle = '#5a5a7a';
+    sx.font = '700 16px "Barlow Condensed", sans-serif';
+    sx.fillText(statItems[i].l, x+bw/2, statsY+78);
+  }
+
+  // Rolling FG% chart
+  const chartY = 510, chartH = 260, chartPad = 80;
+  sx.fillStyle = '#12121c';
+  sx.beginPath();
+  sx.roundRect(chartPad, chartY, W-chartPad*2, chartH, 14);
+  sx.fill();
+
+  sx.fillStyle = '#5a5a7a';
+  sx.font = '700 18px "Barlow Condensed", sans-serif';
+  sx.textAlign = 'left';
+  sx.fillText('ROLLING FG%', chartPad+16, chartY+28);
+
+  if (total >= 2) {
+    const cL=chartPad+40, cR=W-chartPad-20, cT=chartY+44, cB=chartY+chartH-30;
+    const cW=cR-cL, cH=cB-cT;
+    // Grid
+    sx.strokeStyle = '#1e1e2e'; sx.lineWidth = 1;
+    for (let p = 0; p <= 100; p += 25) {
+      const y = cB - (p/100)*cH;
+      sx.beginPath(); sx.moveTo(cL,y); sx.lineTo(cR,y); sx.stroke();
+      sx.fillStyle = '#3a3a5a'; sx.font = '14px sans-serif'; sx.textAlign = 'right';
+      sx.fillText(p+'%', cL-8, y+4);
+    }
+    // Line
+    let mk = 0;
+    sx.beginPath();
+    for (let i = 0; i < total; i++) {
+      if (shots[i].made) mk++;
+      const x = cL + (i/(total-1))*cW;
+      const y = cB - (mk/(i+1))*cH;
+      i===0 ? sx.moveTo(x,y) : sx.lineTo(x,y);
+    }
+    sx.strokeStyle = '#ff6b1a'; sx.lineWidth = 3.5; sx.stroke();
+  }
+
+  // Breakdown
+  const bdY = 810;
+  sx.fillStyle = '#5a5a7a';
+  sx.font = '700 18px "Barlow Condensed", sans-serif';
+  sx.textAlign = 'left';
+  sx.fillText('BREAKDOWN', chartPad, bdY);
+
+  let rowY = bdY + 36;
+  for (const t of ['2PT','3PT','FT']) {
+    const ts = shots.filter(s=>s.type===t);
+    if (!ts.length) continue;
+    const m = ts.filter(s=>s.made).length;
+    const p = Math.round(m/ts.length*100);
+    const c = p>=50?'#22c55e':'#ff6b1a';
+    // Type label
+    sx.fillStyle = '#ff6b1a'; sx.font = '800 28px "Barlow Condensed", sans-serif';
+    sx.textAlign = 'left'; sx.fillText(t, chartPad, rowY+24);
+    // Bar bg
+    const barX = chartPad+80, barW = W-chartPad*2-220;
+    sx.fillStyle = '#1e1e2e';
+    sx.beginPath(); sx.roundRect(barX, rowY+8, barW, 16, 8); sx.fill();
+    // Bar fill
+    sx.fillStyle = c;
+    sx.beginPath(); sx.roundRect(barX, rowY+8, barW*(p/100), 16, 8); sx.fill();
+    // Pct + count
+    sx.fillStyle = c; sx.font = '800 28px "Barlow Condensed", sans-serif';
+    sx.textAlign = 'right'; sx.fillText(p+'%', W-chartPad-60, rowY+26);
+    sx.fillStyle = '#5a5a7a'; sx.font = '400 22px "Barlow Condensed", sans-serif';
+    sx.fillText(`${m}/${ts.length}`, W-chartPad, rowY+26);
+    rowY += 52;
+  }
+
+  // Shot dots
+  const dotsY = rowY + 30;
+  sx.fillStyle = '#5a5a7a';
+  sx.font = '700 18px "Barlow Condensed", sans-serif';
+  sx.textAlign = 'left';
+  sx.fillText('SHOT HISTORY', chartPad, dotsY);
+
+  const dotR = 14, dotGap = 8, dotsPerRow = Math.floor((W-chartPad*2)/(dotR*2+dotGap));
+  for (let i = 0; i < Math.min(total, 60); i++) {
+    const col = i % dotsPerRow, row = Math.floor(i / dotsPerRow);
+    const dx = chartPad + col*(dotR*2+dotGap) + dotR;
+    const dy = dotsY + 30 + row*(dotR*2+dotGap) + dotR;
+    sx.beginPath(); sx.arc(dx,dy,dotR,0,Math.PI*2);
+    sx.fillStyle = shots[i].made ? '#22c55e' : '#ef4444';
+    sx.fill();
+  }
+
+  // Footer
+  sx.fillStyle = '#2a2a3e';
+  sx.font = '400 20px "Barlow Condensed", sans-serif';
+  sx.textAlign = 'center';
+  sx.fillText('AI Shot Tracker', W/2, H-30);
+
+  // Export
+  try {
+    const blob = await new Promise(r => sc.toBlob(r, 'image/png'));
+    const file = new File([blob], 'shot-tracker-session.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'Shot Tracker Session' });
+    } else {
+      // Fallback: download
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'shot-tracker-session.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  } catch(e) {
+    // User cancelled share or error — ignore
+  }
+}
+
+// ── PWA: SERVICE WORKER + INSTALL PROMPT ─────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+  $('install-bar').style.display = 'flex';
+});
+
+$('btn-install').onclick = async () => {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  const { outcome } = await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  $('install-bar').style.display = 'none';
+};
+
+$('btn-dismiss-install').onclick = () => {
+  $('install-bar').style.display = 'none';
+};
+
+// Hide install bar if already installed
+if (window.matchMedia('(display-mode: standalone)').matches) {
+  $('install-bar').style.display = 'none';
+}
 
 // ── INIT ─────────────────────────────────────────────────────────────────
 updateUI();

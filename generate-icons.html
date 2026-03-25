@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html><body>
+<p>Right-click each image and "Save image as..." to save the icons.</p>
+<h3>icon-192.png</h3>
+<canvas id="c192" width="192" height="192"></canvas>
+<h3>icon-512.png</h3>
+<canvas id="c512" width="512" height="512"></canvas>
+<script>
+function draw(canvas) {
+  const s = canvas.width, ctx = canvas.getContext('2d');
+  const r = s * 0.1875; // corner radius
+  // Background
+  ctx.beginPath();
+  ctx.roundRect(0, 0, s, s, r);
+  ctx.fillStyle = '#08080f';
+  ctx.fill();
+  // Ball
+  const cx = s/2, cy = s/2, br = s * 0.35;
+  ctx.beginPath(); ctx.arc(cx, cy, br, 0, Math.PI*2);
+  ctx.fillStyle = '#ff6b1a'; ctx.fill();
+  // Lines
+  ctx.strokeStyle = '#08080f'; ctx.lineWidth = s * 0.02;
+  ctx.beginPath(); ctx.moveTo(cx, cy-br); ctx.lineTo(cx, cy+br); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-br, cy); ctx.lineTo(cx+br, cy); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, br, 0, Math.PI*2); ctx.stroke();
+  // Curves
+  ctx.beginPath();
+  ctx.moveTo(cx-br, cy);
+  ctx.quadraticCurveTo(cx-br*0.45, cy-br*0.45, cx, cy-br);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx+br, cy);
+  ctx.quadraticCurveTo(cx+br*0.45, cy+br*0.45, cx, cy+br);
+  ctx.stroke();
+  // Download link
+  const link = document.createElement('a');
+  link.download = `icon-${s}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.textContent = `Download icon-${s}.png`;
+  canvas.parentNode.insertBefore(link, canvas.nextSibling);
+}
+draw(document.getElementById('c192'));
+draw(document.getElementById('c512'));
+</script>
+</body></html>
