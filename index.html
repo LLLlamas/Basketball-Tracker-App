@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>🏀 AI Shot Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.3/dist/coco-ssd.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; overscroll-behavior: none; }
+#app { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; min-height: 100dvh; }
+
+/* ── HEADER ── */
+#header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #1e1e2e; background: #0b0b12; }
+#title { font-size: 21px; font-weight: 900; letter-spacing: 2px; text-transform: uppercase; }
+#title span { color: #ff6b1a; }
+#undo-area { display: flex; gap: 6px; }
+.small-btn { background: #13131e; border: 1px solid #1e1e2e; color: #5a5a7a; border-radius: 8px; padding: 5px 13px; font-size: 13px; cursor: pointer; font-family: inherit; transition: background .15s; }
+.small-btn:hover { background: #1e1e2e; }
+.small-btn.danger { color: #ef4444; }
+
+/* ── STATS BAR ── */
+#stats-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: #1e1e2e; }
+.stat-cell { background: #0f0f18; padding: 10px 4px; text-align: center; }
+.stat-val { font-size: 22px; font-weight: 900; line-height: 1; }
+.stat-lbl { font-size: 10px; color: #5a5a7a; letter-spacing: 1.5px; margin-top: 3px; }
+
+/* ── CAMERA WRAP ── */
+#camera-wrap { position: relative; width: 100%; background: #000; aspect-ratio: 9/16; max-height: 62dvh; overflow: hidden; flex-shrink: 0; }
+#video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+#overlay-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+#cam-off { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #08080f; z-index: 10; }
+#cam-off .cam-icon { font-size: 52px; }
+.start-cam-btn { background: #ff6b1a; border: none; color: #fff; border-radius: 14px; padding: 13px 36px; font-size: 20px; font-weight: 900; cursor: pointer; font-family: inherit; letter-spacing: 1px; box-shadow: 0 4px 20px rgba(255,107,26,0.4); }
+#cam-error-msg { color: #ef4444; font-size: 13px; text-align: center; padding: 0 24px; }
+
+/* ── OVERLAYS ── */
+#shot-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .15s; z-index: 5; }
+#make-popup { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0); font-size: 32px; font-weight: 900; background: rgba(34,197,94,.92); padding: 12px 28px; border-radius: 18px; white-space: nowrap; pointer-events: none; transition: transform .2s cubic-bezier(.34,1.56,.64,1), opacity .3s; opacity: 0; z-index: 8; letter-spacing: 2px; }
+#auto-badge { position: absolute; top: 8px; right: 8px; background: rgba(100,40,220,.88); color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; padding: 3px 10px; border-radius: 6px; display: none; z-index: 6; }
+#live-fg-box { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,.72); border-radius: 10px; padding: 5px 14px; display: none; z-index: 6; backdrop-filter: blur(4px); }
+#live-pct { font-size: 26px; font-weight: 900; color: #ff6b1a; }
+#live-count { font-size: 12px; color: #5a5a7a; margin-left: 6px; }
+#hoop-hint { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 14px; font-weight: 700; color: #fff; background: rgba(0,0,0,.7); padding: 8px; display: none; letter-spacing: 1.5px; z-index: 7; }
+
+/* ── STATUS BAR ── */
+#model-status { padding: 8px 16px; font-size: 12px; color: #5a5a7a; letter-spacing: 1px; background: #0c0c14; border-bottom: 1px solid #1a1a28; display: flex; align-items: center; gap: 8px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.s-loading { background: #ff6b1a; animation: blink 1s infinite; }
+.s-ready { background: #22c55e; }
+.s-off { background: #5a5a7a; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.35} }
+
+/* ── CONTROLS ── */
+#controls { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+#cam-row { display: flex; gap: 8px; }
+.ctrl-btn { flex: 1; background: #12121c; border: 1.5px solid #1e1e2e; color: #f0f0f8; border-radius: 10px; padding: 11px 6px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; letter-spacing: 1px; transition: all .15s; }
+.ctrl-btn:disabled { opacity: .35; cursor: not-allowed; }
+.ctrl-btn.cam-active { border-color: #22c55e; color: #22c55e; }
+.ctrl-btn.hoop-active { border-color: #ff6b1a; color: #ff6b1a; }
+#type-row { display: flex; gap: 8px; }
+.type-btn { flex: 1; background: #12121c; border: 1.5px solid #1e1e2e; color: #5a5a7a; border-radius: 10px; padding: 10px 0; font-size: 19px; font-weight: 800; cursor: pointer; font-family: inherit; letter-spacing: 1px; transition: all .15s; }
+.type-btn.sel { background: #ff6b1a; border-color: #ff6b1a; color: #fff; }
+#action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+#btn-miss { background: #ef4444; border: none; color: #fff; border-radius: 20px; padding: 28px 0; font-size: 28px; font-weight: 900; cursor: pointer; font-family: inherit; letter-spacing: 2px; box-shadow: 0 4px 24px rgba(239,68,68,.3); transition: transform .1s, filter .1s; }
+#btn-make { background: #22c55e; border: none; color: #fff; border-radius: 20px; padding: 28px 0; font-size: 28px; font-weight: 900; cursor: pointer; font-family: inherit; letter-spacing: 2px; box-shadow: 0 4px 24px rgba(34,197,94,.3); transition: transform .1s, filter .1s; }
+#btn-miss:active, #btn-make:active { transform: scale(0.95); filter: brightness(.85); }
+
+/* ── STREAK ── */
+#streak-bar { margin: 0 16px 4px; background: #12121c; border: 1px solid #1e1e2e; border-radius: 10px; padding: 9px 16px; text-align: center; font-size: 16px; font-weight: 700; letter-spacing: 1px; display: none; }
+
+/* ── SHOT HISTORY ── */
+#history { padding: 4px 16px 12px; display: none; }
+.hist-lbl { font-size: 11px; color: #5a5a7a; letter-spacing: 2px; margin-bottom: 8px; }
+#shot-dots { display: flex; gap: 6px; flex-wrap: wrap; }
+.sdot { width: 19px; height: 19px; border-radius: 50%; }
+.sdot-make { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.5); }
+.sdot-miss { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,.4); }
+
+/* ── BREAKDOWN ── */
+#breakdown { margin: 0 16px 20px; background: #12121c; border: 1px solid #1e1e2e; border-radius: 14px; overflow: hidden; display: none; }
+.bd-title { padding: 12px 16px 6px; font-size: 11px; color: #5a5a7a; letter-spacing: 2px; }
+.bd-row { padding: 10px 16px; border-top: 1px solid #1e1e2e; display: flex; align-items: center; gap: 10px; }
+.bd-type { font-size: 13px; font-weight: 800; color: #ff6b1a; width: 32px; }
+.bd-bar-wrap { flex: 1; background: #1e1e2e; border-radius: 4px; height: 6px; overflow: hidden; }
+.bd-bar { height: 100%; border-radius: 4px; transition: width .4s; }
+.bd-pct { font-size: 17px; font-weight: 800; width: 44px; text-align: right; }
+.bd-cnt { font-size: 12px; color: #5a5a7a; width: 36px; }
+
+/* ── EMPTY ── */
+#empty { text-align: center; padding: 24px 24px 32px; color: #5a5a7a; font-size: 15px; line-height: 1.7; }
+#empty .big { font-size: 38px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <div id="header">
+    <div id="title"><span>🏀</span> Shot Tracker</div>
+    <div id="undo-area">
+      <button class="small-btn" id="btn-undo" style="display:none">↩ Undo</button>
+      <button class="small-btn danger" id="btn-reset" style="display:none">Reset</button>
+    </div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div id="stats-bar">
+    <div class="stat-cell"><div class="stat-val" id="s-pct" style="color:#5a5a7a">—</div><div class="stat-lbl">FG%</div></div>
+    <div class="stat-cell"><div class="stat-val" id="s-makes" style="color:#22c55e">0</div><div class="stat-lbl">MAKES</div></div>
+    <div class="stat-cell"><div class="stat-val" id="s-misses" style="color:#ef4444">0</div><div class="stat-lbl">MISSES</div></div>
+    <div class="stat-cell"><div class="stat-val" id="s-total">0</div><div class="stat-lbl">SHOTS</div></div>
+  </div>
+
+  <!-- CAMERA -->
+  <div id="camera-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay-canvas"></canvas>
+    <div id="cam-off">
+      <div class="cam-icon">📷</div>
+      <div style="color:#5a5a7a;font-size:14px">Enable camera to start tracking</div>
+      <button class="start-cam-btn" id="btn-start-cam">Enable Camera</button>
+      <div id="cam-error-msg"></div>
+    </div>
+    <div id="shot-flash"></div>
+    <div id="make-popup">MAKE! 🔥</div>
+    <div id="auto-badge">🤖 AUTO</div>
+    <div id="live-fg-box">
+      <span id="live-pct">—</span><span id="live-count">0/0</span>
+    </div>
+    <div id="hoop-hint">👆 TAP to place hoop marker</div>
+  </div>
+
+  <!-- MODEL STATUS -->
+  <div id="model-status">
+    <div class="status-dot s-loading" id="sdot"></div>
+    <span id="stext">Loading AI ball-detection model…</span>
+  </div>
+
+  <!-- CONTROLS -->
+  <div id="controls">
+    <div id="cam-row">
+      <button class="ctrl-btn" id="btn-camera">📷 Enable Camera</button>
+      <button class="ctrl-btn" id="btn-hoop" disabled>🎯 Set Hoop</button>
+    </div>
+    <div id="type-row">
+      <button class="type-btn sel" data-t="2PT">2PT</button>
+      <button class="type-btn" data-t="3PT">3PT</button>
+      <button class="type-btn" data-t="FT">FT</button>
+    </div>
+    <div id="action-row">
+      <button id="btn-miss">✕ MISS</button>
+      <button id="btn-make">✓ MAKE</button>
+    </div>
+  </div>
+
+  <div id="streak-bar"></div>
+
+  <div id="history">
+    <div class="hist-lbl">LAST SHOTS</div>
+    <div id="shot-dots"></div>
+  </div>
+
+  <div id="empty">
+    <div class="big">🏀</div>
+    <strong style="color:#f0f0f8">How it works:</strong><br>
+    1. Enable camera · point at the hoop<br>
+    2. Tap <em>Set Hoop</em> · tap the hoop on screen<br>
+    3. AI auto-detects 🤖 <strong style="color:#a855f7">makes</strong> — tap ✕ MISS manually<br>
+    4. Or use both buttons any time
+  </div>
+
+  <div id="breakdown">
+    <div class="bd-title">BREAKDOWN BY TYPE</div>
+    <div id="bd-rows"></div>
+  </div>
+
+</div>
+<script>
+// ── GLOBALS ──────────────────────────────────────────────────────────────
+let tfModel = null, modelReady = false;
+let camStream = null, camOn = false;
+let rafId = null, frameN = 0;
+let shots = [], selType = '2PT';
+let hoop = null;      // { nx, ny } normalized 0-1
+let settingHoop = false;
+let ballHistory = []; // [{cx,cy,ts}] canvas-px
+let lastBall = null;  // {cx,cy,r,score,ts}
+let lastAutoTs = 0;
+const COOLDOWN = 2800;
+const DETECT_EVERY = 5; // model inference every N frames
+const HOOP_R_NORM = 0.09; // hoop radius as fraction of canvas width
+let detecting = false;
+let autoActive = false;
+
+// ── DOM REFS ─────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const video  = $('video');
+const canvas = $('overlay-canvas');
+const ctx    = canvas.getContext('2d');
+
+// ── MODEL ────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    setStatus('loading','Loading AI model — may take ~10s on first visit…');
+    tfModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+    modelReady = true;
+    setStatus('ready','🤖 AI ready · set hoop for auto-detection');
+  } catch(e) {
+    setStatus('off','AI unavailable · use manual buttons');
+  }
+})();
+
+function setStatus(type, txt) {
+  $('stext').textContent = txt;
+  $('sdot').className = 'status-dot ' + (type==='loading'?'s-loading':type==='ready'?'s-ready':'s-off');
+}
+
+// ── CAMERA ───────────────────────────────────────────────────────────────
+$('btn-start-cam').onclick = startCamera;
+$('btn-camera').onclick = () => camOn ? stopCamera() : startCamera();
+
+async function startCamera() {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1080}, height:{ideal:1920}, aspectRatio:{ideal:9/16} },
+      audio:false
+    });
+    video.srcObject = camStream;
+    await new Promise(r => video.addEventListener('loadedmetadata', r, {once:true}));
+    video.play();
+    camOn = true;
+    $('cam-off').style.display = 'none';
+    $('live-fg-box').style.display = '';
+    $('btn-camera').textContent = '📷 Camera On';
+    $('btn-camera').className = 'ctrl-btn cam-active';
+    $('btn-hoop').disabled = false;
+    setTimeout(resizeCanvas, 100);
+    startLoop();
+  } catch(e) {
+    $('cam-error-msg').textContent = 'Camera denied — allow access and retry.';
+  }
+}
+
+function stopCamera() {
+  if (camStream) camStream.getTracks().forEach(t=>t.stop());
+  camStream = null; video.srcObject = null; camOn = false;
+  if (rafId) cancelAnimationFrame(rafId);
+  $('cam-off').style.display = '';
+  $('live-fg-box').style.display = 'none';
+  $('auto-badge').style.display = 'none';
+  $('btn-camera').textContent = '📷 Enable Camera';
+  $('btn-camera').className = 'ctrl-btn';
+  $('btn-hoop').disabled = true;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  autoActive = false;
+}
+
+function resizeCanvas() {
+  const wrap = document.getElementById('camera-wrap');
+  canvas.width  = wrap.clientWidth  || 320;
+  canvas.height = wrap.clientHeight || 568;
+}
+window.addEventListener('resize', ()=>{ if(camOn) resizeCanvas(); });
+
+// ── HOOP SETUP ───────────────────────────────────────────────────────────
+$('btn-hoop').onclick = () => {
+  settingHoop = !settingHoop;
+  $('hoop-hint').style.display   = settingHoop ? 'block' : 'none';
+  $('btn-hoop').className = 'ctrl-btn' + (settingHoop ? ' hoop-active' : '');
+  canvas.style.pointerEvents = settingHoop ? 'auto' : 'none';
+  canvas.style.cursor        = settingHoop ? 'crosshair' : 'default';
+};
+
+canvas.addEventListener('click', e => {
+  if (!settingHoop) return;
+  const rect = canvas.getBoundingClientRect();
+  const px = (e.clientX - rect.left) * (canvas.width  / rect.width);
+  const py = (e.clientY - rect.top)  * (canvas.height / rect.height);
+  hoop = { nx: px/canvas.width, ny: py/canvas.height };
+  settingHoop = false;
+  $('hoop-hint').style.display = 'none';
+  $('btn-hoop').className = 'ctrl-btn';
+  canvas.style.pointerEvents = 'none';
+  canvas.style.cursor = 'default';
+  autoActive = true;
+  $('auto-badge').style.display = 'block';
+  setStatus('ready','🎯 Hoop set · auto-detecting makes');
+});
+
+// ── DETECTION LOOP ───────────────────────────────────────────────────────
+function startLoop() {
+  function tick() {
+    rafId = requestAnimationFrame(tick);
+    frameN++;
+    if (!video.readyState || video.readyState < 2) return;
+    if (canvas.width < 10) resizeCanvas();
+
+    // Draw video frame
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    // Draw overlays
+    drawTrail();
+    if (lastBall && Date.now()-lastBall.ts < 600) drawBallCircle();
+    drawHoop();
+
+    // Run AI inference every N frames
+    if (modelReady && frameN % DETECT_EVERY === 0) runDetect();
+  }
+  tick();
+}
+
+async function runDetect() {
+  if (detecting || !modelReady) return;
+  detecting = true;
+  try {
+    const preds = await tfModel.detect(video);
+    const balls = preds.filter(p => p.class==='sports ball' && p.score > 0.35);
+    if (balls.length) {
+      const b = balls.reduce((a,c)=>c.score>a.score?c:a);
+      const [bx,by,bw,bh] = b.bbox;
+      const scX = canvas.width  / video.videoWidth;
+      const scY = canvas.height / video.videoHeight;
+      const cx = (bx + bw/2) * scX;
+      const cy = (by + bh/2) * scY;
+      const r  = (bw/2) * scX;
+      lastBall = { cx, cy, r, score:b.score, ts:Date.now() };
+      addHistory(cx, cy);
+      checkMake();
+    } else {
+      if (lastBall && Date.now()-lastBall.ts > 1200) lastBall = null;
+    }
+  } catch(e){}
+  detecting = false;
+}
+
+// ── BALL HISTORY ─────────────────────────────────────────────────────────
+function addHistory(cx, cy) {
+  const now = Date.now();
+  ballHistory = ballHistory.filter(p=>now-p.ts<1600);
+  ballHistory.push({cx, cy, ts:now});
+  if (ballHistory.length > 40) ballHistory.shift();
+}
+
+// ── AUTO MAKE CHECK ──────────────────────────────────────────────────────
+function checkMake() {
+  if (!hoop || Date.now()-lastAutoTs < COOLDOWN) return;
+  if (ballHistory.length < 3) return;
+  const recent = ballHistory.filter(p=>Date.now()-p.ts<1000);
+  if (recent.length < 2) return;
+  const hx = hoop.nx * canvas.width;
+  const hy = hoop.ny * canvas.height;
+  const hr = HOOP_R_NORM * canvas.width;
+
+  for (let i=1; i<recent.length; i++) {
+    const p1=recent[i-1], p2=recent[i];
+    if (p2.cy <= p1.cy) continue;             // must move downward
+    if (p1.cy >= hy    || p2.cy < hy) continue; // must cross hoop y
+    const t = (hy - p1.cy) / (p2.cy - p1.cy);
+    const crossX = p1.cx + t*(p2.cx-p1.cx);
+    if (Math.abs(crossX - hx) < hr) {          // within hoop width
+      lastAutoTs = Date.now();
+      logShot(true, true);
+      popMake();
+      return;
+    }
+  }
+}
+
+// ── DRAWING ──────────────────────────────────────────────────────────────
+function drawHoop() {
+  if (!hoop) return;
+  const hx = hoop.nx*canvas.width, hy = hoop.ny*canvas.height;
+  const hr = HOOP_R_NORM*canvas.width;
+  ctx.save();
+  // glow
+  ctx.beginPath(); ctx.arc(hx,hy,hr*1.4,0,Math.PI*2);
+  ctx.strokeStyle='rgba(255,107,26,.12)'; ctx.lineWidth=16; ctx.stroke();
+  // ring
+  ctx.beginPath(); ctx.arc(hx,hy,hr,0,Math.PI*2);
+  ctx.strokeStyle = autoActive ? '#ff6b1a' : '#4a4a6a';
+  ctx.lineWidth=3; ctx.setLineDash([7,5]); ctx.stroke(); ctx.setLineDash([]);
+  // inner cross
+  ctx.beginPath();
+  ctx.moveTo(hx-10,hy); ctx.lineTo(hx+10,hy);
+  ctx.moveTo(hx,hy-10); ctx.lineTo(hx,hy+10);
+  ctx.strokeStyle='rgba(255,107,26,.7)'; ctx.lineWidth=2; ctx.stroke();
+  // label
+  ctx.fillStyle='#ff6b1a'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
+  ctx.fillText('HOOP', hx, hy-hr-7);
+  ctx.restore();
+}
+
+function drawTrail() {
+  const now = Date.now();
+  const recent = ballHistory.filter(p=>now-p.ts<900);
+  if (recent.length<1) return;
+  for (const p of recent) {
+    const age = (now-p.ts)/900;
+    const a   = (1-age)*0.75;
+    const r   = 5 + (1-age)*5;
+    ctx.beginPath(); ctx.arc(p.cx,p.cy,r,0,Math.PI*2);
+    ctx.fillStyle=`rgba(255,120,30,${a})`; ctx.fill();
+  }
+}
+
+function drawBallCircle() {
+  const {cx,cy,r,score} = lastBall;
+  ctx.save();
+  // detection ring
+  ctx.beginPath(); ctx.arc(cx,cy,r+6,0,Math.PI*2);
+  ctx.strokeStyle=`rgba(255,140,60,${score.toFixed(2)})`; ctx.lineWidth=3; ctx.stroke();
+  // crosshair
+  const s=r*0.55;
+  ctx.beginPath();
+  ctx.moveTo(cx-s,cy); ctx.lineTo(cx+s,cy);
+  ctx.moveTo(cx,cy-s); ctx.lineTo(cx,cy+s);
+  ctx.strokeStyle=`rgba(255,255,255,${(score*.6).toFixed(2)})`; ctx.lineWidth=1.5; ctx.stroke();
+  // label
+  ctx.fillStyle='#ffad70'; ctx.font='bold 11px sans-serif'; ctx.textAlign='center';
+  ctx.fillText(`🏀 ${Math.round(score*100)}%`, cx, cy-r-10);
+  ctx.restore();
+}
+
+// ── SHOT LOGGING ─────────────────────────────────────────────────────────
+function logShot(made, auto=false) {
+  shots.push({ made, type:selType, ts:Date.now(), auto });
+  flashScreen(made);
+  updateUI();
+}
+
+function flashScreen(made) {
+  const f=$('shot-flash');
+  f.style.background = made ? 'rgba(34,197,94,.42)' : 'rgba(239,68,68,.42)';
+  f.style.opacity=1;
+  setTimeout(()=>f.style.opacity=0, 320);
+}
+
+function popMake() {
+  const p=$('make-popup');
+  p.style.transform='translate(-50%,-50%) scale(1)'; p.style.opacity=1;
+  setTimeout(()=>{ p.style.transform='translate(-50%,-50%) scale(0)'; p.style.opacity=0; }, 1500);
+}
+
+$('btn-make').onclick = ()=>{ logShot(true);  popMake(); };
+$('btn-miss').onclick = ()=>  logShot(false);
+$('btn-undo').onclick = ()=>{ shots.pop(); updateUI(); };
+$('btn-reset').onclick= ()=>{ if(confirm('Reset session?')){ shots=[]; updateUI(); } };
+
+// ── UI UPDATE ────────────────────────────────────────────────────────────
+function updateUI() {
+  const total = shots.length;
+  const makes = shots.filter(s=>s.made).length;
+  const misses= total-makes;
+  const pct   = total===0 ? '—' : Math.round(makes/total*100)+'%';
+  const pctColor= total===0?'#5a5a7a':makes/total>=.5?'#22c55e':'#ff6b1a';
+
+  $('s-pct').textContent=pct;     $('s-pct').style.color=pctColor;
+  $('s-makes').textContent=makes;
+  $('s-misses').textContent=misses;
+  $('s-total').textContent=total;
+  $('live-pct').textContent=pct;  $('live-pct').style.color=pctColor;
+  $('live-count').textContent=`${makes}/${total}`;
+
+  $('btn-undo').style.display = total>0?'':'none';
+  $('btn-reset').style.display= total>0?'':'none';
+  $('empty').style.display    = total===0?'':'none';
+
+  // streak
+  (() => {
+    if (!total) { $('streak-bar').style.display='none'; return; }
+    const last=shots[total-1].made; let streak=0;
+    for(let i=total-1;i>=0;i--){ if(shots[i].made===last) streak++; else break; }
+    if (streak<2) { $('streak-bar').style.display='none'; return; }
+    $('streak-bar').style.display='';
+    $('streak-bar').textContent = last ? `🔥 ${streak} in a row!` : `❄️ ${streak}-miss run`;
+    $('streak-bar').style.color = last?'#22c55e':'#ef4444';
+  })();
+
+  // shot dots
+  const hist = $('history'), dotsEl=$('shot-dots');
+  hist.style.display = total>0?'':'none';
+  dotsEl.innerHTML = shots.slice(-20).map(s=>`<div class="sdot ${s.made?'sdot-make':'sdot-miss'}" title="${s.type} ${s.made?'MAKE':'MISS'}${s.auto?' (auto)':''}"></div>`).join('');
+
+  // breakdown
+  const bd=$('breakdown');
+  if (!total) { bd.style.display='none'; return; }
+  bd.style.display='';
+  $('bd-rows').innerHTML = ['2PT','3PT','FT'].map(t=>{
+    const ts=shots.filter(s=>s.type===t);
+    if(!ts.length) return '';
+    const m=ts.filter(s=>s.made).length, p=Math.round(m/ts.length*100);
+    const c=p>=50?'#22c55e':'#ff6b1a';
+    return `<div class="bd-row">
+      <div class="bd-type">${t}</div>
+      <div class="bd-bar-wrap"><div class="bd-bar" style="width:${p}%;background:${c}"></div></div>
+      <div class="bd-pct" style="color:${c}">${p}%</div>
+      <div class="bd-cnt">${m}/${ts.length}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── TYPE SELECTOR ────────────────────────────────────────────────────────
+document.querySelectorAll('.type-btn').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.type-btn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel');
+    selType=b.dataset.t;
+  };
+});
+
+// ── INIT ─────────────────────────────────────────────────────────────────
+updateUI();
+</script>
+</body>
+</html>
