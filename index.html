@@ -68,13 +68,9 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
 .ctrl-btn:disabled { opacity: .35; cursor: not-allowed; }
 .ctrl-btn.cam-active { border-color: #22c55e; color: #22c55e; }
 .ctrl-btn.hoop-active { border-color: #ff6b1a; color: #ff6b1a; }
-#type-row { display: flex; gap: 8px; }
-.type-btn { flex: 1; background: #12121c; border: 1.5px solid #1e1e2e; color: #5a5a7a; border-radius: 10px; padding: 10px 0; font-size: 19px; font-weight: 800; cursor: pointer; font-family: inherit; letter-spacing: 1px; transition: all .15s; }
-.type-btn.sel { background: #ff6b1a; border-color: #ff6b1a; color: #fff; }
-#action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-#btn-miss { background: #ef4444; border: none; color: #fff; border-radius: 20px; padding: 28px 0; font-size: 28px; font-weight: 900; cursor: pointer; font-family: inherit; letter-spacing: 2px; box-shadow: 0 4px 24px rgba(239,68,68,.3); transition: transform .1s, filter .1s; }
-#btn-make { background: #22c55e; border: none; color: #fff; border-radius: 20px; padding: 28px 0; font-size: 28px; font-weight: 900; cursor: pointer; font-family: inherit; letter-spacing: 2px; box-shadow: 0 4px 24px rgba(34,197,94,.3); transition: transform .1s, filter .1s; }
-#btn-miss:active, #btn-make:active { transform: scale(0.95); filter: brightness(.85); }
+
+/* ── MISS POPUP ── */
+#miss-popup { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0); font-size: 32px; font-weight: 900; background: rgba(239,68,68,.92); padding: 12px 28px; border-radius: 18px; white-space: nowrap; pointer-events: none; transition: transform .2s cubic-bezier(.34,1.56,.64,1), opacity .3s; opacity: 0; z-index: 8; letter-spacing: 2px; }
 
 /* ── STREAK ── */
 #streak-bar { margin: 0 16px 4px; background: #12121c; border: 1px solid #1e1e2e; border-radius: 10px; padding: 9px 16px; text-align: center; font-size: 16px; font-weight: 700; letter-spacing: 1px; display: none; }
@@ -87,15 +83,8 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
 .sdot-make { background: #22c55e; box-shadow: 0 0 6px rgba(34,197,94,.5); }
 .sdot-miss { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,.4); }
 
-/* ── BREAKDOWN ── */
-#breakdown { margin: 0 16px 20px; background: #12121c; border: 1px solid #1e1e2e; border-radius: 14px; overflow: hidden; display: none; }
-.bd-title { padding: 12px 16px 6px; font-size: 11px; color: #5a5a7a; letter-spacing: 2px; }
-.bd-row { padding: 10px 16px; border-top: 1px solid #1e1e2e; display: flex; align-items: center; gap: 10px; }
-.bd-type { font-size: 13px; font-weight: 800; color: #ff6b1a; width: 32px; }
-.bd-bar-wrap { flex: 1; background: #1e1e2e; border-radius: 4px; height: 6px; overflow: hidden; }
-.bd-bar { height: 100%; border-radius: 4px; transition: width .4s; }
-.bd-pct { font-size: 17px; font-weight: 800; width: 44px; text-align: right; }
-.bd-cnt { font-size: 12px; color: #5a5a7a; width: 36px; }
+/* ── DETECTION ZONE INDICATOR ── */
+#detect-zone { position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,.72); border-radius: 8px; padding: 4px 10px; display: none; z-index: 6; font-size: 11px; font-weight: 700; letter-spacing: 1px; backdrop-filter: blur(4px); }
 
 /* ── EMPTY ── */
 #empty { text-align: center; padding: 24px 24px 32px; color: #5a5a7a; font-size: 15px; line-height: 1.7; }
@@ -121,11 +110,6 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
 .sum-streak-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #1a1a28; font-size: 15px; }
 .sum-streak-row span:last-child { font-weight: 800; }
 #sum-chart { width: 100%; height: 130px; background: #12121c; border-radius: 10px; border: 1px solid #1e1e2e; }
-.sum-bd-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #1a1a28; }
-.sum-bd-type { font-size: 14px; font-weight: 800; color: #ff6b1a; width: 36px; }
-.sum-bd-bar { flex: 1; background: #1e1e2e; border-radius: 4px; height: 8px; overflow: hidden; }
-.sum-bd-bar-fill { height: 100%; border-radius: 4px; }
-.sum-bd-info { font-size: 15px; font-weight: 800; width: 80px; text-align: right; }
 .sum-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 18px; }
 .sum-btn-share { background: #ff6b1a; border: none; color: #fff; border-radius: 14px; padding: 14px 24px; font-size: 17px; font-weight: 900; cursor: pointer; font-family: inherit; letter-spacing: 1px; box-shadow: 0 4px 20px rgba(255,107,26,.3); }
 .sum-btn-close { background: #1e1e2e; border: none; color: #5a5a7a; border-radius: 14px; padding: 12px 24px; font-size: 15px; cursor: pointer; font-family: inherit; }
@@ -178,7 +162,9 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
     </div>
     <div id="shot-flash"></div>
     <div id="make-popup">MAKE!</div>
+    <div id="miss-popup">MISS</div>
     <div id="auto-badge">AUTO</div>
+    <div id="detect-zone"></div>
     <div id="live-fg-box">
       <span id="live-pct">—</span><span id="live-count">0/0</span>
     </div>
@@ -197,15 +183,6 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
       <button class="ctrl-btn" id="btn-camera">📷 Enable Camera</button>
       <button class="ctrl-btn" id="btn-hoop" disabled>🎯 Set Hoop</button>
     </div>
-    <div id="type-row">
-      <button class="type-btn sel" data-t="2PT">2PT</button>
-      <button class="type-btn" data-t="3PT">3PT</button>
-      <button class="type-btn" data-t="FT">FT</button>
-    </div>
-    <div id="action-row">
-      <button id="btn-miss">✕ MISS</button>
-      <button id="btn-make">✓ MAKE</button>
-    </div>
   </div>
 
   <div id="streak-bar"></div>
@@ -220,14 +197,9 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
     <strong style="color:#f0f0f8">How it works:</strong><br>
     1. Enable camera · point at the hoop<br>
     2. Tap <em>Set Hoop</em> · tap the hoop on screen<br>
-    3. AI auto-detects <strong style="color:#a855f7">makes</strong> — tap ✕ MISS manually<br>
-    4. Or use both buttons any time
+    3. AI auto-detects <strong style="color:#22c55e">makes</strong> &amp; <strong style="color:#ef4444">misses</strong>
   </div>
 
-  <div id="breakdown">
-    <div class="bd-title">BREAKDOWN BY TYPE</div>
-    <div id="bd-rows"></div>
-  </div>
 
 </div>
 
@@ -250,10 +222,6 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
       <div class="sum-section-title">ROLLING FG%</div>
       <canvas id="sum-chart"></canvas>
     </div>
-    <div class="sum-section">
-      <div class="sum-section-title">BREAKDOWN</div>
-      <div id="sum-breakdown"></div>
-    </div>
     <div class="sum-actions">
       <button class="sum-btn-share" id="btn-share">Share as Image</button>
       <button class="sum-btn-close" id="btn-close-sum">Close</button>
@@ -266,7 +234,7 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
 let tfModel = null, modelReady = false;
 let camStream = null, camOn = false;
 let rafId = null, frameN = 0;
-let shots = [], selType = '2PT';
+let shots = [];
 let hoop = null;      // { nx, ny } normalized 0-1
 let settingHoop = false;
 let ballHistory = []; // [{cx,cy,ts}] canvas-px
@@ -279,6 +247,13 @@ const HOOP_R_NORM = 0.09;
 let detecting = false;
 let autoActive = false;
 let soundOn = true;
+
+// ── SHOT ATTEMPT STATE (for auto miss detection) ────────────────────────
+let shotAttempt = null; // { startTs, peakY, ballAboveHoop, ballPassedHoop, resolved }
+const SHOT_ZONE_ABOVE = 0.35;   // ball must be within this fraction of canvas height above hoop to count as attempt
+const SHOT_ZONE_SIDE  = 2.5;    // multiplier of HOOP_R for horizontal proximity
+const MISS_TIMEOUT    = 1800;   // ms after ball enters zone without make → miss
+const BALL_LOST_MISS  = 2200;   // ms after ball lost near hoop → miss
 
 // ── DOM REFS ─────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -395,6 +370,7 @@ function stopCamera() {
   $('btn-hoop').disabled = true;
   ctx.clearRect(0,0,canvas.width,canvas.height);
   autoActive = false;
+  shotAttempt = null;
 }
 
 function resizeCanvas() {
@@ -477,6 +453,7 @@ async function runDetect() {
         lastBall = null;
         detectInterval = 6; // conserve CPU when no ball
       }
+      checkBallLostMiss(); // check if ball was lost near hoop → miss
     }
   } catch(e){}
   detecting = false;
@@ -509,34 +486,112 @@ function predictBall() {
   return { cx: last.cx + vx*dt, cy: last.cy + vy*dt, ts: last.ts + 150 };
 }
 
-// ── AUTO MAKE CHECK ──────────────────────────────────────────────────────
+// ── AUTO SHOT DETECTION (MAKE + MISS) ────────────────────────────────────
 function checkMake() {
   if (!hoop || Date.now()-lastAutoTs < COOLDOWN) return;
   if (ballHistory.length < 3) return;
 
+  const now = Date.now();
+  const hx = hoop.nx * canvas.width;
+  const hy = hoop.ny * canvas.height;
+  const hr = HOOP_R_NORM * canvas.width;
+
   // Build points to check: recent actual + predicted
-  const recent = ballHistory.filter(p=>Date.now()-p.ts<1500);
+  const recent = ballHistory.filter(p=>now-p.ts<1500);
   const predicted = predictBall();
   const pts = predicted ? [...recent, predicted] : recent;
   if (pts.length < 2) return;
 
-  const hx = hoop.nx * canvas.width;
-  const hy = hoop.ny * canvas.height;
-  const hr = HOOP_R_NORM * canvas.width * 1.2; // slightly wider tolerance
+  const lastPt = pts[pts.length-1];
+  const dx = Math.abs(lastPt.cx - hx);
+  const dy = lastPt.cy - hy;
 
+  // Check if ball is in the "shot zone" — near the hoop horizontally, above or at hoop level
+  const inShotZone = dx < hr * SHOT_ZONE_SIDE && dy < hr * 2 && dy > -canvas.height * SHOT_ZONE_ABOVE;
+
+  // ── MAKE detection: ball crosses downward through hoop ──
+  const makeHr = hr * 1.2; // slightly wider tolerance for makes
   for (let i=1; i<pts.length; i++) {
     const p1=pts[i-1], p2=pts[i];
     if (p2.cy <= p1.cy) continue;             // must move downward
     if (p1.cy >= hy    || p2.cy < hy) continue; // must cross hoop y
     const t = (hy - p1.cy) / (p2.cy - p1.cy);
     const crossX = p1.cx + t*(p2.cx-p1.cx);
-    if (Math.abs(crossX - hx) < hr) {
-      lastAutoTs = Date.now();
+    if (Math.abs(crossX - hx) < makeHr) {
+      lastAutoTs = now;
+      shotAttempt = null; // reset attempt
       logShot(true, true);
       popMake();
+      showDetectZone('MAKE', '#22c55e');
       return;
     }
   }
+
+  // ── SHOT ATTEMPT tracking (for miss detection) ──
+  if (inShotZone && !shotAttempt) {
+    // Ball just entered shot zone — start tracking attempt
+    shotAttempt = { startTs: now, resolved: false };
+    showDetectZone('TRACKING...', '#a855f7');
+  }
+
+  if (shotAttempt && !shotAttempt.resolved) {
+    // Ball was near hoop but is now moving away below hoop level (bounced off rim/backboard)
+    const ballBelow = lastPt.cy > hy + hr * 3;
+    const ballFarSide = dx > hr * SHOT_ZONE_SIDE * 1.5;
+    const elapsed = now - shotAttempt.startTs;
+
+    if ((ballBelow || ballFarSide) && elapsed > 400) {
+      // Ball bounced away — miss
+      shotAttempt.resolved = true;
+      shotAttempt = null;
+      lastAutoTs = now;
+      logShot(false, true);
+      popMiss();
+      showDetectZone('MISS', '#ef4444');
+      return;
+    }
+
+    // Timeout: ball has been near hoop too long without a make (stuck/lost)
+    if (elapsed > MISS_TIMEOUT) {
+      shotAttempt.resolved = true;
+      shotAttempt = null;
+      lastAutoTs = now;
+      logShot(false, true);
+      popMiss();
+      showDetectZone('MISS', '#ef4444');
+      return;
+    }
+  }
+}
+
+// Check for miss when ball is lost after entering shot zone
+function checkBallLostMiss() {
+  if (!hoop || !shotAttempt || shotAttempt.resolved) return;
+  if (Date.now()-lastAutoTs < COOLDOWN) return;
+  const now = Date.now();
+  // If ball hasn't been seen for a while after entering shot zone
+  if (lastBall && now - lastBall.ts > BALL_LOST_MISS) {
+    shotAttempt.resolved = true;
+    shotAttempt = null;
+    lastAutoTs = now;
+    logShot(false, true);
+    popMiss();
+    showDetectZone('MISS (lost)', '#ef4444');
+  }
+}
+
+function showDetectZone(text, color) {
+  const el = $('detect-zone');
+  el.textContent = text;
+  el.style.color = color;
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 2000);
+}
+
+function popMiss() {
+  const p=$('miss-popup');
+  p.style.transform='translate(-50%,-50%) scale(1)'; p.style.opacity=1;
+  setTimeout(()=>{ p.style.transform='translate(-50%,-50%) scale(0)'; p.style.opacity=0; }, 1500);
 }
 
 // ── DRAWING ──────────────────────────────────────────────────────────────
@@ -590,7 +645,7 @@ function drawBallCircle() {
 // ── SHOT LOGGING ─────────────────────────────────────────────────────────
 function logShot(made, auto=false) {
   if (!sessionStartTs) sessionStartTs = Date.now();
-  shots.push({ made, type:selType, ts:Date.now(), auto });
+  shots.push({ made, ts:Date.now(), auto });
   flashScreen(made);
   if (made) playSwish(); else playBuzz();
   updateUI();
@@ -609,8 +664,6 @@ function popMake() {
   setTimeout(()=>{ p.style.transform='translate(-50%,-50%) scale(0)'; p.style.opacity=0; }, 1500);
 }
 
-$('btn-make').onclick = ()=>{ logShot(true);  popMake(); };
-$('btn-miss').onclick = ()=>  logShot(false);
 $('btn-undo').onclick = ()=>{ shots.pop(); updateUI(); };
 $('btn-reset').onclick= ()=>{ if(confirm('Reset session?')){ shots=[]; sessionStartTs=null; updateUI(); } };
 
@@ -648,34 +701,9 @@ function updateUI() {
   // shot dots
   const hist = $('history'), dotsEl=$('shot-dots');
   hist.style.display = total>0?'':'none';
-  dotsEl.innerHTML = shots.slice(-20).map(s=>`<div class="sdot ${s.made?'sdot-make':'sdot-miss'}" title="${s.type} ${s.made?'MAKE':'MISS'}${s.auto?' (auto)':''}"></div>`).join('');
+  dotsEl.innerHTML = shots.slice(-20).map(s=>`<div class="sdot ${s.made?'sdot-make':'sdot-miss'}" title="${s.made?'MAKE':'MISS'}${s.auto?' (auto)':''}"></div>`).join('');
 
-  // breakdown
-  const bd=$('breakdown');
-  if (!total) { bd.style.display='none'; return; }
-  bd.style.display='';
-  $('bd-rows').innerHTML = ['2PT','3PT','FT'].map(t=>{
-    const ts=shots.filter(s=>s.type===t);
-    if(!ts.length) return '';
-    const m=ts.filter(s=>s.made).length, p=Math.round(m/ts.length*100);
-    const c=p>=50?'#22c55e':'#ff6b1a';
-    return `<div class="bd-row">
-      <div class="bd-type">${t}</div>
-      <div class="bd-bar-wrap"><div class="bd-bar" style="width:${p}%;background:${c}"></div></div>
-      <div class="bd-pct" style="color:${c}">${p}%</div>
-      <div class="bd-cnt">${m}/${ts.length}</div>
-    </div>`;
-  }).join('');
 }
-
-// ── TYPE SELECTOR ────────────────────────────────────────────────────────
-document.querySelectorAll('.type-btn').forEach(b=>{
-  b.onclick=()=>{
-    document.querySelectorAll('.type-btn').forEach(x=>x.classList.remove('sel'));
-    b.classList.add('sel');
-    selType=b.dataset.t;
-  };
-});
 
 // ── SESSION SUMMARY ──────────────────────────────────────────────────────
 $('btn-summary').onclick = openSummary;
@@ -723,19 +751,6 @@ function openSummary() {
 
   // Rolling FG% chart
   drawChart();
-
-  // Breakdown
-  $('sum-breakdown').innerHTML = ['2PT','3PT','FT'].map(t=>{
-    const ts=shots.filter(s=>s.type===t);
-    if(!ts.length) return '';
-    const m=ts.filter(s=>s.made).length, p=Math.round(m/ts.length*100);
-    const c=p>=50?'#22c55e':'#ff6b1a';
-    return `<div class="sum-bd-row">
-      <div class="sum-bd-type">${t}</div>
-      <div class="sum-bd-bar"><div class="sum-bd-bar-fill" style="width:${p}%;background:${c}"></div></div>
-      <div class="sum-bd-info" style="color:${c}">${p}% <span style="color:#5a5a7a;font-weight:400">${m}/${ts.length}</span></div>
-    </div>`;
-  }).join('');
 
   $('sum-panel').classList.remove('hidden');
   $('sum-overlay').classList.remove('hidden');
@@ -895,40 +910,8 @@ async function shareSummary() {
     sx.strokeStyle = '#ff6b1a'; sx.lineWidth = 3.5; sx.stroke();
   }
 
-  // Breakdown
-  const bdY = 810;
-  sx.fillStyle = '#5a5a7a';
-  sx.font = '700 18px "Barlow Condensed", sans-serif';
-  sx.textAlign = 'left';
-  sx.fillText('BREAKDOWN', chartPad, bdY);
-
-  let rowY = bdY + 36;
-  for (const t of ['2PT','3PT','FT']) {
-    const ts = shots.filter(s=>s.type===t);
-    if (!ts.length) continue;
-    const m = ts.filter(s=>s.made).length;
-    const p = Math.round(m/ts.length*100);
-    const c = p>=50?'#22c55e':'#ff6b1a';
-    // Type label
-    sx.fillStyle = '#ff6b1a'; sx.font = '800 28px "Barlow Condensed", sans-serif';
-    sx.textAlign = 'left'; sx.fillText(t, chartPad, rowY+24);
-    // Bar bg
-    const barX = chartPad+80, barW = W-chartPad*2-220;
-    sx.fillStyle = '#1e1e2e';
-    sx.beginPath(); sx.roundRect(barX, rowY+8, barW, 16, 8); sx.fill();
-    // Bar fill
-    sx.fillStyle = c;
-    sx.beginPath(); sx.roundRect(barX, rowY+8, barW*(p/100), 16, 8); sx.fill();
-    // Pct + count
-    sx.fillStyle = c; sx.font = '800 28px "Barlow Condensed", sans-serif';
-    sx.textAlign = 'right'; sx.fillText(p+'%', W-chartPad-60, rowY+26);
-    sx.fillStyle = '#5a5a7a'; sx.font = '400 22px "Barlow Condensed", sans-serif';
-    sx.fillText(`${m}/${ts.length}`, W-chartPad, rowY+26);
-    rowY += 52;
-  }
-
   // Shot dots
-  const dotsY = rowY + 30;
+  const dotsY = 810;
   sx.fillStyle = '#5a5a7a';
   sx.font = '700 18px "Barlow Condensed", sans-serif';
   sx.textAlign = 'left';
