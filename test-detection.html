@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Shot Detection Test Suite</title>
+<style>
+* { box-sizing: border-box; }
+body { background: #0a0a12; color: #f0f0f8; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 16px; }
+h1 { color: #ff6b1a; font-size: 20px; margin-bottom: 4px; }
+.subtitle { color: #5a5a7a; font-size: 13px; margin-bottom: 16px; }
+
+/* ── Test Suite Config ── */
+.suite-panel { background: #12121c; border: 1px solid #1e1e2e; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.suite-panel h2 { color: #ff6b1a; font-size: 15px; margin: 0 0 12px; }
+.test-entry { display: grid; grid-template-columns: 1fr auto 2fr auto; gap: 8px; align-items: center; margin-bottom: 8px; padding: 8px; background: #0a0a12; border-radius: 6px; }
+.test-entry label { color: #5a5a7a; font-size: 12px; }
+.test-entry input, .test-entry select { background: #1e1e2e; border: 1px solid #333; color: #f0f0f8; padding: 6px 10px; border-radius: 4px; font-size: 13px; }
+.test-entry input[type=text] { width: 100%; }
+.test-entry .hoop-inputs { display: flex; gap: 4px; }
+.test-entry .hoop-inputs input { width: 60px; text-align: center; }
+.test-entry .status-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 700; min-width: 60px; text-align: center; }
+.badge-waiting { background: #1e1e2e; color: #5a5a7a; }
+.badge-running { background: #3b82f622; color: #3b82f6; }
+.badge-pass { background: #22c55e22; color: #22c55e; }
+.badge-partial { background: #f59e0b22; color: #f59e0b; }
+.badge-fail { background: #ef444422; color: #ef4444; }
+
+button { background: #1e1e2e; border: 1px solid #333; color: #f0f0f8; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+button:hover { background: #2a2a3e; }
+button.primary { background: #ff6b1a; border-color: #ff6b1a; color: #fff; font-weight: 700; }
+button.green { background: #22c55e; border-color: #22c55e; color: #fff; font-weight: 700; }
+button.red { background: #ef4444; border-color: #ef4444; color: #fff; }
+button:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-row { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.btn-row .add-btn { font-size: 18px; padding: 4px 12px; }
+
+/* ── Results ── */
+.results-panel { background: #12121c; border: 1px solid #1e1e2e; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+.results-panel h2 { color: #ff6b1a; font-size: 15px; margin: 0 0 12px; }
+.overall-score { font-size: 36px; font-weight: 900; text-align: center; padding: 16px; }
+.overall-score .pct { font-size: 48px; }
+.overall-score .detail { font-size: 14px; color: #5a5a7a; margin-top: 4px; }
+
+.result-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.result-table th { text-align: left; color: #5a5a7a; font-size: 11px; letter-spacing: 1px; padding: 6px 8px; border-bottom: 1px solid #1e1e2e; }
+.result-table td { padding: 6px 8px; border-bottom: 1px solid #0a0a12; }
+.result-table .correct { color: #22c55e; }
+.result-table .wrong { color: #ef4444; }
+.shot-seq { font-family: monospace; font-size: 13px; letter-spacing: 2px; }
+.shot-seq .m { color: #22c55e; font-weight: 700; }
+.shot-seq .x { color: #ef4444; font-weight: 700; }
+.shot-seq .err { background: #ef444433; padding: 1px 3px; border-radius: 3px; }
+
+/* ── Video Preview ── */
+.preview-area { display: flex; gap: 16px; flex-wrap: wrap; }
+.video-preview { position: relative; background: #000; display: inline-block; }
+.video-preview video { display: block; max-width: 360px; max-height: 450px; }
+.video-preview canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+.log-area { flex: 1; min-width: 280px; max-height: 450px; overflow-y: auto; font-family: monospace; font-size: 11px; line-height: 1.5; background: #0a0a12; border: 1px solid #1e1e2e; border-radius: 6px; padding: 8px; }
+.log-area .make { color: #22c55e; font-weight: 700; }
+.log-area .miss { color: #ef4444; font-weight: 700; }
+.log-area .color { color: #a855f7; }
+.log-area .track { color: #3b82f6; }
+.log-area .dim { color: #5a5a7a; }
+
+.progress-bar { height: 4px; background: #1e1e2e; border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.progress-bar .fill { height: 100%; background: #ff6b1a; transition: width 0.3s; }
+#overall-progress { height: 6px; background: #1e1e2e; border-radius: 3px; margin: 12px 0; overflow: hidden; display: none; }
+#overall-progress .fill { height: 100%; background: linear-gradient(90deg, #ff6b1a, #22c55e); transition: width 0.3s; }
+</style>
+</head>
+<body>
+<h1>🏀 Shot Detection Test Suite</h1>
+<div class="subtitle">Add test videos with ground truth, run batch detection, measure accuracy across all clips</div>
+
+<!-- ── Test Videos Config ── -->
+<div class="suite-panel" id="config-panel">
+  <h2>📹 Test Videos</h2>
+  <div id="test-list"></div>
+  <div class="btn-row">
+    <button class="add-btn" onclick="addTestEntry()">+ Add Video</button>
+    <span style="color:#5a5a7a;font-size:12px;margin-left:8px">Ground truth: M=make, X=miss (e.g. "M,X,X,M,X")</span>
+  </div>
+</div>
+
+<!-- ── Controls ── -->
+<div class="btn-row" style="margin-bottom:16px">
+  <button class="green" id="btn-run-all" onclick="runAllTests()">▶ Run All Tests</button>
+  <button class="red" id="btn-stop" onclick="stopTests()" style="display:none">⏹ Stop</button>
+  <span id="run-status" style="color:#5a5a7a;font-size:13px"></span>
+</div>
+<div id="overall-progress"><div class="fill" id="overall-fill"></div></div>
+
+<!-- ── Results ── -->
+<div class="results-panel" id="results-panel" style="display:none">
+  <h2>📊 Results</h2>
+  <div class="overall-score" id="overall-score"></div>
+  <table class="result-table" id="result-table">
+    <thead><tr><th>VIDEO</th><th>HOOP</th><th>EXPECTED</th><th>DETECTED</th><th>ACCURACY</th><th>DETAIL</th></tr></thead>
+    <tbody id="result-body"></tbody>
+  </table>
+</div>
+
+<!-- ── Live Preview ── -->
+<div class="preview-area" id="preview-area" style="display:none">
+  <div class="video-preview">
+    <video id="video" preload="auto" muted></video>
+    <canvas id="overlay"></canvas>
+    <div class="progress-bar"><div class="fill" id="video-progress"></div></div>
+  </div>
+  <div class="log-area" id="log"></div>
+</div>
+
+<script>
+// ── STATE ──
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const octx = overlay.getContext('2d');
+const logEl = document.getElementById('log');
+let hoop = null, running = false, stopRequested = false;
+let ballHistory = [], lastBall = null, lastAutoTs = 0, shotAttempt = null, shots = [];
+const motionCanvas = document.createElement('canvas');
+const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
+
+// ── DETECTION CONSTANTS ──
+const HOOP_R_NORM = 0.09;
+const COOLDOWN = 4000;
+const SHOT_ZONE_ABOVE = 0.25;
+const SHOT_ZONE_SIDE = 2.0;
+const MISS_TIMEOUT = 3000;   // extended to allow rim disruption time to register
+const BALL_LOST_MISS = 3500;
+
+// ── RIM DISRUPTION DETECTION ──
+// Frame-differencing in hoop zone to detect ball passing through
+const DISRUPT_SIZE = 64;
+const disruptCanvas = document.createElement('canvas');
+const disruptCtx = disruptCanvas.getContext('2d', { willReadFrequently: true });
+let prevRimData = null;
+let rimScores = []; // [{ts, score}]
+let lastDisruptMakeTs = 0;
+const DISRUPT_COOLDOWN = 3500;
+
+// ── STATIC DETECTION FILTER ──
+let staticDetectCount = 0;
+let lastDetectPos = null; // {cx, cy}
+const STATIC_THRESHOLD = 5; // frames at same position = static
+
+// ── TEST SUITE DATA ──
+let testEntries = [];
+let testIdCounter = 0;
+
+function addTestEntry(file='', hoopX='0.44', hoopY='0.47', truth='') {
+  const id = testIdCounter++;
+  const entry = { id, file, hoopX, hoopY, truth, status: 'waiting', result: null };
+  testEntries.push(entry);
+  renderTestList();
+  return entry;
+}
+
+function removeTestEntry(id) {
+  testEntries = testEntries.filter(e => e.id !== id);
+  renderTestList();
+}
+
+function renderTestList() {
+  const container = document.getElementById('test-list');
+  container.innerHTML = testEntries.map(e => `
+    <div class="test-entry" data-id="${e.id}">
+      <div>
+        <label>Video file (in media/)</label>
+        <input type="text" placeholder="clip.mp4" value="${e.file}" onchange="updateEntry(${e.id},'file',this.value)">
+      </div>
+      <div>
+        <label>Hoop (nx, ny)</label>
+        <div class="hoop-inputs">
+          <input type="text" placeholder="0.44" value="${e.hoopX}" onchange="updateEntry(${e.id},'hoopX',this.value)">
+          <input type="text" placeholder="0.47" value="${e.hoopY}" onchange="updateEntry(${e.id},'hoopY',this.value)">
+        </div>
+      </div>
+      <div>
+        <label>Ground Truth (M,X,M,...)</label>
+        <input type="text" placeholder="M,X,X,M,X" value="${e.truth}" onchange="updateEntry(${e.id},'truth',this.value)">
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <span class="status-badge badge-${e.status}" id="badge-${e.id}">${badgeText(e)}</span>
+        <button onclick="removeTestEntry(${e.id})" style="padding:4px 8px;color:#ef4444;font-size:16px" title="Remove">✕</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function badgeText(e) {
+  if (e.status === 'waiting') return '—';
+  if (e.status === 'running') return '⏳';
+  if (e.status === 'pass') return `✓ ${e.result.pct}%`;
+  if (e.status === 'partial') return `${e.result.pct}%`;
+  if (e.status === 'fail') return `✗ ${e.result.pct}%`;
+  if (e.status === 'error') return '⚠ ERR';
+  return '—';
+}
+
+function updateEntry(id, field, value) {
+  const e = testEntries.find(t => t.id === id);
+  if (e) e[field] = value;
+}
+
+// ── Add default test videos ──
+addTestEntry('make_miss_full.mov', '0.44', '0.47', 'M,X,X,X,M,M,X');
+addTestEntry('all_makes.mp4', '0.33', '0.42', 'M,M,M,M');
+addTestEntry('stationary 1.MOV', '0.47', '0.22', 'M,X,X,M,M,X,X,M,M,X');
+addTestEntry('stationary 2.MOV', '0.47', '0.22', 'X,M,M,X,M,M,M');
+
+// ── BATCH RUNNER ──
+async function runAllTests() {
+  const valid = testEntries.filter(e => e.file && e.truth);
+  if (!valid.length) { alert('Add at least one test video with ground truth'); return; }
+
+  running = true; stopRequested = false;
+  document.getElementById('btn-run-all').style.display = 'none';
+  document.getElementById('btn-stop').style.display = '';
+  document.getElementById('preview-area').style.display = '';
+  document.getElementById('results-panel').style.display = 'none';
+  document.getElementById('overall-progress').style.display = '';
+
+  // Reset all entries
+  for (const e of testEntries) { e.status = 'waiting'; e.result = null; }
+  renderTestList();
+
+  const allResults = [];
+
+  for (let vi = 0; vi < valid.length && !stopRequested; vi++) {
+    const entry = valid[vi];
+    entry.status = 'running';
+    renderTestList();
+    document.getElementById('run-status').textContent = `Running ${vi+1}/${valid.length}: ${entry.file}`;
+    document.getElementById('overall-fill').style.width = `${(vi/valid.length)*100}%`;
+
+    try {
+      const result = await runSingleTest(entry);
+      entry.result = result;
+      entry.status = result.pct === 100 ? 'pass' : result.pct >= 70 ? 'partial' : 'fail';
+      allResults.push({ entry, result });
+    } catch(err) {
+      entry.status = 'error';
+      entry.result = { error: err.message, pct: 0 };
+      allResults.push({ entry, result: entry.result });
+    }
+    renderTestList();
+  }
+
+  document.getElementById('overall-fill').style.width = '100%';
+  running = false;
+  document.getElementById('btn-run-all').style.display = '';
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('run-status').textContent = 'Done!';
+
+  showResults(allResults);
+}
+
+function stopTests() { stopRequested = true; running = false; }
+
+async function runSingleTest(entry) {
+  // Load video
+  video.src = 'media/' + entry.file;
+  await new Promise((res, rej) => {
+    video.onloadeddata = res;
+    video.onerror = () => rej(new Error('Failed to load ' + entry.file));
+    setTimeout(() => rej(new Error('Timeout loading ' + entry.file)), 20000);
+  });
+
+  overlay.width = video.videoWidth;
+  overlay.height = video.videoHeight;
+  hoop = { nx: parseFloat(entry.hoopX), ny: parseFloat(entry.hoopY) };
+
+  // Reset detection state
+  shots = []; ballHistory = []; lastBall = null;
+  lastAutoTs = 0; shotAttempt = null;
+  bgMask = null; bgAccum = null; bgBuildCount = 0;
+  prevRimData = null; rimScores = []; lastDisruptMakeTs = 0;
+  staticDetectCount = 0; lastDetectPos = null;
+  logEl.innerHTML = '';
+  video.pause();
+
+  const step = 0.15, dur = video.duration;
+  let colorN = 0;
+  log(`===== ${entry.file} | ${video.videoWidth}×${video.videoHeight} | ${dur.toFixed(1)}s =====`, 'make');
+  log(`Hoop: (${hoop.nx}, ${hoop.ny}) | Truth: ${entry.truth}`, 'dim');
+
+  for (let t = 0; t < dur && !stopRequested; t += step) {
+    video.currentTime = t;
+    await new Promise(r => video.addEventListener('seeked', r, { once: true }));
+    await new Promise(r => setTimeout(r, 8));
+    document.getElementById('video-progress').style.width = `${(t/dur)*100}%`;
+    octx.clearRect(0, 0, overlay.width, overlay.height);
+    drawHoop();
+
+    const now = t * 1000;
+    let found = false;
+
+    // Rim disruption detection (always runs)
+    const disruptScore = detectRimDisruption(video, now);
+    if (disruptScore > 3) {
+      log(`  [${(now/1000).toFixed(2)}] rim=${disruptScore.toFixed(1)}`, 'color');
+    }
+
+    // Color detection (also builds bg mask in first ~8 frames)
+    const cb = detectBallByColor(video);
+    if (cb) {
+      // Filter out static detections (stuck on one spot)
+      const isStatic = isStaticDetection(cb.cx, cb.cy);
+      if (!isStatic) {
+        lastBall = { cx: cb.cx, cy: cb.cy, r: cb.r, score: 0.5, ts: now };
+        addHistory(cb.cx, cb.cy, now);
+        found = true; colorN++;
+        log(`  [${(now/1000).toFixed(2)}] ball=(${cb.cx.toFixed(0)},${cb.cy.toFixed(0)}) r=${cb.r.toFixed(0)} n=${cb.count}`, 'color');
+      } else {
+        log(`  [${(now/1000).toFixed(2)}] STATIC skip (${cb.cx.toFixed(0)},${cb.cy.toFixed(0)})`, 'dim');
+      }
+    }
+
+    try {
+      if (found) { checkMake(now); }
+      else {
+        if (lastBall && now - lastBall.ts > 1200) lastBall = null;
+      }
+
+      if (!lastBall || now - lastBall.ts > 800) {
+        resolveHangingShotAttempt(now);
+      }
+
+      checkDisruptionMake(now);
+    } catch(e) {
+      log(`ERROR: ${e.message} at ${e.stack?.split('\n')[1]?.trim()}`, 'miss');
+    }
+
+    drawTrail(now);
+  }
+
+  // Compare with ground truth
+  const truthArr = entry.truth.split(',').map(s => s.trim().toUpperCase());
+  const detectedArr = shots.map(s => s.made ? 'M' : 'X');
+  let correct = 0, total = Math.max(truthArr.length, detectedArr.length);
+  for (let i = 0; i < total; i++) {
+    if (truthArr[i] === detectedArr[i]) correct++;
+  }
+  const pct = total > 0 ? Math.round(correct / total * 100) : 0;
+
+  const result = {
+    detected: detectedArr.join(','),
+    expected: truthArr.join(','),
+    correct, total, pct,
+    shots: shots.map((s,i) => ({ n:i+1, made:s.made, ts:(s.ts/1000).toFixed(2) })),
+    colorDetections: colorN,
+    duration: dur
+  };
+
+  log(`\n===== RESULT: ${correct}/${total} (${pct}%) =====`, pct === 100 ? 'make' : 'miss');
+  log(`Expected: ${result.expected}`, 'dim');
+  log(`Detected: ${result.detected}`, pct === 100 ? 'make' : 'miss');
+
+  return result;
+}
+
+// ── RESULTS DISPLAY ──
+function showResults(allResults) {
+  document.getElementById('results-panel').style.display = '';
+
+  let totalCorrect = 0, totalShots = 0;
+  for (const { result } of allResults) {
+    if (!result.error) { totalCorrect += result.correct; totalShots += result.total; }
+  }
+  const overallPct = totalShots > 0 ? Math.round(totalCorrect / totalShots * 100) : 0;
+
+  const scoreEl = document.getElementById('overall-score');
+  const color = overallPct === 100 ? '#22c55e' : overallPct >= 80 ? '#f59e0b' : '#ef4444';
+  scoreEl.innerHTML = `<div class="pct" style="color:${color}">${overallPct}%</div>
+    <div class="detail">${totalCorrect} / ${totalShots} shots correct across ${allResults.length} video(s)</div>`;
+
+  const tbody = document.getElementById('result-body');
+  tbody.innerHTML = allResults.map(({ entry, result }) => {
+    if (result.error) {
+      return `<tr><td>${entry.file}</td><td colspan="5" style="color:#ef4444">Error: ${result.error}</td></tr>`;
+    }
+    // Build annotated sequence
+    const expected = result.expected.split(',');
+    const detected = result.detected.split(',');
+    const maxLen = Math.max(expected.length, detected.length);
+    let seqHtml = '';
+    for (let i = 0; i < maxLen; i++) {
+      const e = expected[i] || '?';
+      const d = detected[i] || '?';
+      const match = e === d;
+      const cls = d === 'M' ? 'm' : 'x';
+      seqHtml += `<span class="${cls}${match ? '' : ' err'}">${d}</span>`;
+      if (i < maxLen - 1) seqHtml += ' ';
+    }
+
+    const pctColor = result.pct === 100 ? '#22c55e' : result.pct >= 70 ? '#f59e0b' : '#ef4444';
+    return `<tr>
+      <td>${entry.file}</td>
+      <td style="font-family:monospace;font-size:12px">${entry.hoopX}, ${entry.hoopY}</td>
+      <td class="shot-seq">${expected.map(v => `<span class="${v==='M'?'m':'x'}">${v}</span>`).join(' ')}</td>
+      <td class="shot-seq">${seqHtml}</td>
+      <td style="color:${pctColor};font-weight:700">${result.pct}% (${result.correct}/${result.total})</td>
+      <td style="color:#5a5a7a;font-size:11px">${result.colorDetections} det | ${result.duration.toFixed(0)}s</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── DETECTION LOGIC (same as index.html) ──
+function addHistory(cx, cy, now) {
+  ballHistory = ballHistory.filter(p => now - p.ts < 2500);
+  if (ballHistory.length > 0) {
+    const last = ballHistory[ballHistory.length - 1];
+    const dt = (now - last.ts) / 1000;
+    if (dt > 0 && dt < 1) {
+      const dist = Math.sqrt((cx - last.cx)**2 + (cy - last.cy)**2);
+      const maxSpeed = overlay.width * 2;
+      if (dist > maxSpeed * dt) return;
+    }
+  }
+  ballHistory.push({ cx, cy, ts: now });
+  if (ballHistory.length > 60) ballHistory.shift();
+}
+
+function checkMake(now) {
+  if (!hoop || now-lastAutoTs < COOLDOWN || ballHistory.length < 2) return;
+  const hx = hoop.nx*overlay.width, hy = hoop.ny*overlay.height, hr = HOOP_R_NORM*overlay.width;
+  const recent = ballHistory.filter(p => now-p.ts < 2000);
+  if (recent.length < 2) return;
+  const lp = recent[recent.length-1];
+  const dx = Math.abs(lp.cx-hx), dy = lp.cy-hy;
+  const inZone = dx < hr*SHOT_ZONE_SIDE && dy < hr*3 && dy > -overlay.height*SHOT_ZONE_ABOVE;
+
+  if (inZone && !shotAttempt) {
+    shotAttempt = { startTs: now, ballBelowCenter: false, peakRim: 0 };
+    log(`[${(now/1000).toFixed(2)}] 🔍 tracking...`, 'track');
+  }
+
+  if (shotAttempt) {
+    const elapsed = now - shotAttempt.startTs;
+
+    // ── PRIMARY: Check rim disruption during this shot window ──
+    // A brief spike in rim zone pixel change = ball passed through net
+    const shotRim = rimScores.filter(s => s.ts >= shotAttempt.startTs && s.ts <= now);
+    const peakDuringShot = shotRim.length ? Math.max(...shotRim.map(s => s.score)) : 0;
+    if (peakDuringShot > shotAttempt.peakRim) {
+      shotAttempt.peakRim = peakDuringShot;
+    }
+
+    // ── SECONDARY: Ball position tracking (legacy, still useful) ──
+    const ballBelow = lp.cy > hy - hr * 0.5 && lp.cy < hy + hr * 2.5;
+    const ballCentered = Math.abs(lp.cx-hx) < hr * 1.2;
+    const prevPt = recent.length >= 2 ? recent[recent.length-2] : null;
+    const prevNearHoop = !prevPt || prevPt.cy > hy - hr * 0.5;
+    if (ballBelow && ballCentered && prevNearHoop && elapsed > 150) {
+      shotAttempt.ballBelowCenter = true;
+    }
+
+    // Ball has left the area — mark pending but don't resolve yet
+    // Wait for rim disruption to register (ball through net takes ~1-2s after tracking)
+    const gone = lp.cy > hy + hr*4 || dx > hr*SHOT_ZONE_SIDE*1.8;
+    if (gone && elapsed > 300 && !shotAttempt.ballGone) {
+      shotAttempt.ballGone = true;
+      shotAttempt.goneTs = now;
+    }
+
+    // Resolve: either timeout, or gone + waited 1.5s for disruption data
+    const goneWaited = shotAttempt.ballGone && (now - shotAttempt.goneTs > 1500);
+    if (goneWaited || elapsed > MISS_TIMEOUT) {
+      const isMake = classifyShotAttempt(shotAttempt, now);
+      shotAttempt = null; lastAutoTs = now;
+      shots.push({ made: isMake, ts: now, auto: true });
+      log(`[${(now/1000).toFixed(2)}] ${isMake ? '✅ MAKE!' : '❌ MISS'} (rim=${peakDuringShot.toFixed(1)})`, isMake ? 'make' : 'miss');
+    }
+  }
+}
+
+// Classify shot attempt using rim disruption (primary) + ball tracking (secondary)
+function classifyShotAttempt(attempt, now) {
+  const windowStart = attempt.startTs - 500;
+  const windowEnd = now + 2000;
+  const shotRim = rimScores.filter(s => s.ts >= windowStart && s.ts <= windowEnd);
+
+  const peakDuringShot = shotRim.length ? Math.max(...shotRim.map(s => s.score)) : 0;
+
+  const baselineRim = rimScores.filter(s => s.ts < windowStart - 500 && s.ts > windowStart - 5000);
+  const baseAvg = baselineRim.length > 2
+    ? baselineRim.reduce((s,v) => s + v.score, 0) / baselineRim.length
+    : 1.5;
+
+  const dynThreshold = Math.max(3.8, baseAvg * 2.5);
+  const highFrames = shotRim.filter(s => s.score > Math.max(3.5, baseAvg * 2));
+  const isBrief = highFrames.length <= 8;
+  const isReasonable = peakDuringShot < 20;
+
+  if (peakDuringShot > dynThreshold && isBrief && isReasonable) {
+    log(`  >> rim make: peak=${peakDuringShot.toFixed(1)} base=${baseAvg.toFixed(1)} thr=${dynThreshold.toFixed(1)} high=${highFrames.length}`, 'make');
+    return true;
+  }
+
+  // SECONDARY: Ball tracking through center
+  if (attempt.ballBelowCenter) return true;
+
+  return false;
+}
+
+// Resolve shot attempt when ball tracking stops (no new detections)
+function resolveHangingShotAttempt(now) {
+  if (!shotAttempt) return;
+  const elapsed = now - shotAttempt.startTs;
+  if (elapsed > MISS_TIMEOUT) {
+    const isMake = classifyShotAttempt(shotAttempt, now);
+    const recentPeak = rimScores.length ? Math.max(...rimScores.slice(-15).map(s=>s.score)).toFixed(1) : '0';
+    shotAttempt = null; lastAutoTs = now;
+    shots.push({ made: isMake, ts: now, auto: true });
+    log(`[${(now/1000).toFixed(2)}] ${isMake ? '✅ MAKE!' : '❌ MISS'} (timeout, rim=${recentPeak})`, isMake ? 'make' : 'miss');
+  }
+}
+
+function checkBallLostMiss(now) {
+  if (!hoop||!shotAttempt||now-lastAutoTs<COOLDOWN) return;
+  if (lastBall && now-lastBall.ts > BALL_LOST_MISS) {
+    const isMake = shotAttempt.ballBelowCenter;
+    shotAttempt = null; lastAutoTs = now;
+    shots.push({ made: isMake, ts: now, auto: true });
+    log(`[${(now/1000).toFixed(2)}] ${isMake ? '✅ MAKE!' : '❌ MISS'} (lost)`, isMake ? 'make' : 'miss');
+  }
+}
+
+// ── BACKGROUND-SUBTRACTION COLOR DETECTION ──
+const COLOR_W = 360, COLOR_H = 320;
+let bgMask = null, bgAccum = null, bgBuildCount = 0;
+const BG_FRAMES_NEEDED = 8;
+
+function buildBackgroundFrame(vid) {
+  if (!hoop) return;
+  const scanH = Math.min(vid.videoHeight, vid.videoHeight * (hoop.ny + 0.18));
+  motionCanvas.width = COLOR_W; motionCanvas.height = COLOR_H;
+  motionCtx.drawImage(vid, 0, 0, vid.videoWidth, scanH, 0, 0, COLOR_W, COLOR_H);
+  const data = motionCtx.getImageData(0, 0, COLOR_W, COLOR_H).data;
+  if (!bgAccum) bgAccum = new Uint8Array(COLOR_W * COLOR_H);
+  for (let y = 0; y < COLOR_H; y++)
+    for (let x = 0; x < COLOR_W; x++) {
+      const i = (y * COLOR_W + x) * 4;
+      if (isBallColor(data[i], data[i+1], data[i+2])) bgAccum[y*COLOR_W+x]++;
+    }
+  bgBuildCount++;
+  if (bgBuildCount >= BG_FRAMES_NEEDED) {
+    bgMask = new Uint8Array(COLOR_W * COLOR_H);
+    const thr = Math.floor(BG_FRAMES_NEEDED * 0.4);
+    for (let i = 0; i < bgAccum.length; i++) if (bgAccum[i] >= thr) bgMask[i] = 1;
+    log(`BG mask: ${bgMask.reduce((s,v)=>s+v,0)} static px`, 'dim');
+  }
+}
+
+function resetBackground() { bgMask = null; bgAccum = null; bgBuildCount = 0; }
+
+function detectBallByColor(vid) {
+  if (!hoop) return null;
+  if (!bgMask) { buildBackgroundFrame(vid); return null; }
+
+  const scanH = Math.min(vid.videoHeight, vid.videoHeight * (hoop.ny + 0.18));
+  motionCanvas.width = COLOR_W; motionCanvas.height = COLOR_H;
+  motionCtx.drawImage(vid, 0, 0, vid.videoWidth, scanH, 0, 0, COLOR_W, COLOR_H);
+  const data = motionCtx.getImageData(0, 0, COLOR_W, COLOR_H).data;
+
+  const newPx = [];
+  for (let y = 0; y < COLOR_H; y++)
+    for (let x = 0; x < COLOR_W; x++) {
+      const idx = y * COLOR_W + x;
+      if (bgMask[idx]) continue;
+      const i = idx * 4;
+      if (isBallColor(data[i], data[i+1], data[i+2])) newPx.push(x, y);
+    }
+  if (newPx.length < 6) return null;
+
+  // Grid-based clustering
+  const CELL = 10, grid = {};
+  for (let i = 0; i < newPx.length; i += 2) {
+    const key = Math.floor(newPx[i]/CELL)+','+Math.floor(newPx[i+1]/CELL);
+    if (!grid[key]) grid[key] = { sx:0, sy:0, n:0, cx:Math.floor(newPx[i]/CELL), cy:Math.floor(newPx[i+1]/CELL) };
+    grid[key].sx += newPx[i]; grid[key].sy += newPx[i+1]; grid[key].n++;
+  }
+  const cells = Object.values(grid).filter(c => c.n >= 2);
+  if (!cells.length) return null;
+  cells.sort((a,b) => b.n - a.n);
+
+  const clusters = [], used = new Set();
+  for (let i = 0; i < cells.length; i++) {
+    if (used.has(i)) continue;
+    const cluster = [cells[i]]; used.add(i);
+    let qi = 0;
+    while (qi < cluster.length) {
+      const c = cluster[qi++];
+      for (let j = 0; j < cells.length; j++) {
+        if (used.has(j)) continue;
+        if (Math.abs(cells[j].cx-c.cx)<=2 && Math.abs(cells[j].cy-c.cy)<=2) { cluster.push(cells[j]); used.add(j); }
+      }
+    }
+    const totalN = cluster.reduce((s,c)=>s+c.n, 0);
+    const avgX = cluster.reduce((s,c)=>s+c.sx, 0)/totalN;
+    const avgY = cluster.reduce((s,c)=>s+c.sy, 0)/totalN;
+    // Compute bounding box for compactness check
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const c of cluster) {
+      minX = Math.min(minX, c.cx); maxX = Math.max(maxX, c.cx);
+      minY = Math.min(minY, c.cy); maxY = Math.max(maxY, c.cy);
+    }
+    const bboxW = (maxX - minX + 1) * CELL;
+    const bboxH = (maxY - minY + 1) * CELL;
+    const aspect = bboxW > 0 && bboxH > 0 ? Math.max(bboxW, bboxH) / Math.min(bboxW, bboxH) : 99;
+    clusters.push({ cx:avgX, cy:avgY, n:totalN, cells:cluster.length, aspect });
+  }
+
+  const hoopSX = hoop.nx * COLOR_W;
+  const hoopSY = hoop.ny / (hoop.ny + 0.18) * COLOR_H;
+  let best = null, bestScore = -1;
+  for (const cl of clusters) {
+    if (cl.n < 3 || cl.cells > 60) continue;
+    if (cl.aspect > 3.5) continue; // too elongated (buildings, fence)
+    const dist = Math.sqrt((cl.cx-hoopSX)**2 + (cl.cy-hoopSY)**2);
+    const distScore = Math.max(0, 1 - dist/(COLOR_W*0.5));
+    const sizeScore = cl.n >= 5 && cl.n <= 150 ? 1 : 0.3;
+    const roundBonus = cl.aspect < 2.0 ? 1.2 : 1.0;
+    const score = distScore * sizeScore * cl.n * roundBonus;
+    if (score > bestScore) { bestScore = score; best = cl; }
+  }
+  if (!best || best.n < 3) return null;
+
+  const ballCx = (best.cx / COLOR_W) * overlay.width;
+  const ballCy = (best.cy / COLOR_H) * (scanH / vid.videoHeight) * overlay.height;
+  const approxR = Math.sqrt(best.cells) * CELL / 2 * (overlay.width / COLOR_W);
+  if (approxR > overlay.width * 0.12 || approxR < 2) return null;
+  return { cx: ballCx, cy: ballCy, r: approxR, count: best.n };
+}
+
+// ── RIM DISRUPTION DETECTOR ──
+// Frame-differencing in hoop zone to detect ball passing through
+function detectRimDisruption(vid, now) {
+  if (!hoop) return 0;
+  const vw = vid.videoWidth, vh = vid.videoHeight;
+  const hx = hoop.nx * vw, hy = hoop.ny * vh;
+  const hr = HOOP_R_NORM * vw;
+
+  const zw = hr * 3, zh = hr * 2.5;
+  const sx = Math.max(0, hx - zw / 2);
+  const sy = Math.max(0, hy - zh * 0.4);
+  const sw = Math.min(zw, vw - sx);
+  const sh = Math.min(zh, vh - sy);
+
+  disruptCanvas.width = DISRUPT_SIZE;
+  disruptCanvas.height = DISRUPT_SIZE;
+  disruptCtx.drawImage(vid, sx, sy, sw, sh, 0, 0, DISRUPT_SIZE, DISRUPT_SIZE);
+  const data = disruptCtx.getImageData(0, 0, DISRUPT_SIZE, DISRUPT_SIZE).data;
+
+  if (!prevRimData) {
+    prevRimData = new Uint8Array(data);
+    return 0;
+  }
+
+  let totalDiff = 0, count = 0;
+  const margin = Math.floor(DISRUPT_SIZE * 0.15);
+  for (let y = 0; y < DISRUPT_SIZE; y++) {
+    for (let x = margin; x < DISRUPT_SIZE - margin; x++) {
+      const i = (y * DISRUPT_SIZE + x) * 4;
+      totalDiff += Math.abs(data[i] - prevRimData[i]);
+      totalDiff += Math.abs(data[i+1] - prevRimData[i+1]);
+      totalDiff += Math.abs(data[i+2] - prevRimData[i+2]);
+      count++;
+    }
+  }
+  const avgDiff = count > 0 ? totalDiff / (count * 3) : 0;
+
+  prevRimData = new Uint8Array(data);
+  rimScores.push({ ts: now, score: avgDiff });
+  rimScores = rimScores.filter(s => now - s.ts < 6000);
+
+  return avgDiff;
+}
+
+// Check if rim disruption indicates a make (standalone, outside shot tracking)
+function checkDisruptionMake(now) {
+  if (!hoop || now - lastAutoTs < COOLDOWN || now - lastDisruptMakeTs < DISRUPT_COOLDOWN) return;
+  if (rimScores.length < 5) return;
+
+  const recent = rimScores.filter(s => now - s.ts < 600);
+  if (recent.length < 2) return;
+  const peakScore = Math.max(...recent.map(s => s.score));
+  if (peakScore > 20) return;
+
+  const baseline = rimScores.filter(s => now - s.ts > 1500 && now - s.ts < 5000);
+  const baseAvg = baseline.length > 2
+    ? baseline.reduce((s, v) => s + v.score, 0) / baseline.length
+    : 1.5;
+
+  const dynThreshold = Math.max(3.8, baseAvg * 2.5);
+
+  if (peakScore > dynThreshold) {
+    const last10 = rimScores.slice(-10);
+    const highCount = last10.filter(s => s.score > dynThreshold * 0.6).length;
+    if (highCount > 6) return;
+
+    lastDisruptMakeTs = now;
+    lastAutoTs = now;
+    if (shotAttempt) shotAttempt = null;
+    shots.push({ made: true, ts: now, auto: true, method: 'disruption' });
+    log(`[${(now / 1000).toFixed(2)}] ✅ MAKE (rim=${peakScore.toFixed(1)} net=${peakNet.toFixed(1)} base=${baseAvg.toFixed(1)} thr=${dynThreshold.toFixed(1)})`, 'make');
+  }
+}
+
+// Check if color detection is stuck on a static position
+function isStaticDetection(cx, cy) {
+  if (!lastDetectPos) {
+    lastDetectPos = { cx, cy };
+    staticDetectCount = 1;
+    return false;
+  }
+  const dist = Math.sqrt((cx - lastDetectPos.cx) ** 2 + (cy - lastDetectPos.cy) ** 2);
+  if (dist < 15) { // within 15px = same position
+    staticDetectCount++;
+    lastDetectPos = { cx, cy };
+    return staticDetectCount >= STATIC_THRESHOLD;
+  } else {
+    lastDetectPos = { cx, cy };
+    staticDetectCount = 1;
+    return false;
+  }
+}
+
+function isBallColor(r, g, b) {
+  // Use HSV for more robust color detection across lighting conditions
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const delta = max - min;
+  const sat = max === 0 ? 0 : delta / max;
+  const val = max / 255;
+  let hue = 0;
+  if (delta > 0) {
+    if (max === r) hue = 60 * (((g - b) / delta) % 6);
+    else if (max === g) hue = 60 * ((b - r) / delta + 2);
+    else hue = 60 * ((r - g) / delta + 4);
+    if (hue < 0) hue += 360;
+  }
+  // HSV-based basketball detection: hue 10-40 (orange/tan), moderate sat, decent brightness
+  if (hue >= 8 && hue <= 42 && sat >= 0.15 && val >= 0.35 && r > g && r > b) return true;
+  // Wider hue for very saturated orange balls: hue 5-50
+  if (hue >= 5 && hue <= 50 && sat >= 0.30 && val >= 0.40) return true;
+  // RGB fallbacks
+  if (r > 160 && g > 50 && g < 190 && b < 120 && r > g && r > b * 1.5) return true;
+  // Brown/tan leather ball at distance (Wilson NCAA): muted color, wider G/B ranges
+  if (r > 110 && g > 70 && g < 150 && b > 45 && b < 125 && r > g * 1.05 && r > b * 1.2 && delta > 15) return true;
+  if (r > 95 && g > 45 && g < 105 && b < 88 && r > g * 1.15 && r > b * 1.4) return true;
+  return false;
+}
+
+function drawHoop() {
+  if (!hoop) return;
+  const hx=hoop.nx*overlay.width, hy=hoop.ny*overlay.height, hr=HOOP_R_NORM*overlay.width;
+  octx.save();
+  octx.beginPath(); octx.arc(hx,hy,hr,0,Math.PI*2);
+  octx.strokeStyle='#ff6b1a'; octx.lineWidth=3; octx.setLineDash([7,5]); octx.stroke(); octx.setLineDash([]);
+  octx.beginPath(); octx.moveTo(hx-10,hy); octx.lineTo(hx+10,hy); octx.moveTo(hx,hy-10); octx.lineTo(hx,hy+10);
+  octx.strokeStyle='rgba(255,107,26,.8)'; octx.lineWidth=2; octx.stroke();
+  octx.restore();
+}
+
+function drawTrail(now) {
+  for (const p of ballHistory.filter(p=>now-p.ts<900)) {
+    const a=(1-(now-p.ts)/900)*0.8, r=4+(1-(now-p.ts)/900)*6;
+    octx.beginPath(); octx.arc(p.cx,p.cy,r,0,Math.PI*2);
+    octx.fillStyle=`rgba(255,120,30,${a})`; octx.fill();
+  }
+}
+
+function log(msg, cls='') {
+  const d = document.createElement('div');
+  d.className = cls; d.textContent = msg;
+  logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Expose for programmatic testing
+window.testEntries = testEntries;
+window.addTestEntry = addTestEntry;
+window.runAllTests = runAllTests;
+</script>
+</body>
+</html>

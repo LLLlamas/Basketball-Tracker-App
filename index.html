@@ -72,6 +72,12 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
 /* ── MISS POPUP ── */
 #miss-popup { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0); font-size: 32px; font-weight: 900; background: rgba(239,68,68,.92); padding: 12px 28px; border-radius: 18px; white-space: nowrap; pointer-events: none; transition: transform .2s cubic-bezier(.34,1.56,.64,1), opacity .3s; opacity: 0; z-index: 8; letter-spacing: 2px; }
 
+/* ── TAP ZONES (manual fallback) ── */
+.tap-zone { position: absolute; bottom: 0; width: 50%; height: 72px; display: none; align-items: center; justify-content: center; font-size: 28px; font-weight: 900; z-index: 6; cursor: pointer; user-select: none; -webkit-user-select: none; transition: background .15s; }
+.tap-left  { left: 0; border-radius: 0 0 0 0; background: rgba(239,68,68,.18); color: rgba(239,68,68,.7); }
+.tap-right { right: 0; border-radius: 0 0 0 0; background: rgba(34,197,94,.18); color: rgba(34,197,94,.7); }
+.tap-zone:active { background: rgba(255,255,255,.15); }
+
 /* ── STREAK ── */
 #streak-bar { margin: 0 16px 4px; background: #12121c; border: 1px solid #1e1e2e; border-radius: 10px; padding: 9px 16px; text-align: center; font-size: 16px; font-weight: 700; letter-spacing: 1px; display: none; }
 
@@ -169,6 +175,9 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
       <span id="live-pct">—</span><span id="live-count">0/0</span>
     </div>
     <div id="hoop-hint">TAP to place hoop marker</div>
+    <!-- Manual tap zones (left = miss, right = make) -->
+    <div id="tap-miss" class="tap-zone tap-left">✕</div>
+    <div id="tap-make" class="tap-zone tap-right">✓</div>
   </div>
 
   <!-- MODEL STATUS -->
@@ -197,7 +206,10 @@ html, body { background: #08080f; color: #f0f0f8; font-family: 'Barlow Condensed
     <strong style="color:#f0f0f8">How it works:</strong><br>
     1. Enable camera · point at the hoop<br>
     2. Tap <em>Set Hoop</em> · tap the hoop on screen<br>
-    3. AI auto-detects <strong style="color:#22c55e">makes</strong> &amp; <strong style="color:#ef4444">misses</strong>
+    3. AI auto-detects <strong style="color:#22c55e">makes</strong> &amp; <strong style="color:#ef4444">misses</strong><br>
+    4. Tap <strong style="color:#22c55e">✓</strong> / <strong style="color:#ef4444">✕</strong> on screen if AI misses one<br>
+    <br>
+    <span style="font-size:13px">💡 Tip: Mount phone on a tripod near the hoop for best detection</span>
   </div>
 
 
@@ -241,7 +253,7 @@ let ballHistory = []; // [{cx,cy,ts}] canvas-px
 let lastBall = null;  // {cx,cy,r,score,ts}
 let lastAutoTs = 0;
 let sessionStartTs = null;
-const COOLDOWN = 2800;
+const COOLDOWN = 4000;
 let detectInterval = 5; // adaptive: 2 when ball seen, 6 when idle
 const HOOP_R_NORM = 0.09;
 let detecting = false;
@@ -250,10 +262,26 @@ let soundOn = true;
 
 // ── SHOT ATTEMPT STATE (for auto miss detection) ────────────────────────
 let shotAttempt = null; // { startTs, peakY, ballAboveHoop, ballPassedHoop, resolved }
-const SHOT_ZONE_ABOVE = 0.35;   // ball must be within this fraction of canvas height above hoop to count as attempt
-const SHOT_ZONE_SIDE  = 2.5;    // multiplier of HOOP_R for horizontal proximity
-const MISS_TIMEOUT    = 1800;   // ms after ball enters zone without make → miss
-const BALL_LOST_MISS  = 2200;   // ms after ball lost near hoop → miss
+const SHOT_ZONE_ABOVE = 0.25;   // ball must be within this fraction of canvas height above hoop to count as attempt
+const SHOT_ZONE_SIDE  = 2.0;    // multiplier of HOOP_R for horizontal proximity
+const MISS_TIMEOUT    = 3000;   // ms — extended to allow rim disruption time to register
+const BALL_LOST_MISS  = 3500;   // ms after ball lost near hoop → miss
+
+// ── RIM DISRUPTION DETECTION ────────────────────────────────────────────
+// Frame-differencing in hoop zone to detect ball passing through
+const DISRUPT_SIZE = 64;
+const disruptCanvas = document.createElement('canvas');
+const disruptCtx = disruptCanvas.getContext('2d', { willReadFrequently: true });
+let prevRimData = null;
+let rimScores = []; // [{ts, score}]
+let lastDisruptMakeTs = 0;
+const DISRUPT_COOLDOWN = 3500;
+const DISRUPT_MAKE_THRESHOLD = 8;
+
+// ── STATIC DETECTION FILTER ─────────────────────────────────────────────
+let staticDetectCount = 0;
+let lastDetectPos = null;
+const STATIC_THRESHOLD = 5;
 
 // ── DOM REFS ─────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
@@ -371,6 +399,14 @@ function stopCamera() {
   ctx.clearRect(0,0,canvas.width,canvas.height);
   autoActive = false;
   shotAttempt = null;
+  resetBackground();
+  prevRimData = null;
+  rimScores = [];
+  lastDisruptMakeTs = 0;
+  staticDetectCount = 0;
+  lastDetectPos = null;
+  $('tap-make').style.display = 'none';
+  $('tap-miss').style.display = 'none';
 }
 
 function resizeCanvas() {
@@ -402,7 +438,9 @@ canvas.addEventListener('click', e => {
   canvas.style.cursor = 'default';
   autoActive = true;
   $('auto-badge').style.display = 'block';
-  setStatus('ready','Hoop set · auto-detecting makes');
+  $('tap-make').style.display = 'flex';
+  $('tap-miss').style.display = 'flex';
+  setStatus('ready','Hoop set · auto-detecting · tap ✓/✕ as backup');
 });
 
 // ── DETECTION LOOP ───────────────────────────────────────────────────────
@@ -418,6 +456,12 @@ function startLoop() {
     if (lastBall && Date.now()-lastBall.ts < 600) drawBallCircle();
     drawHoop();
 
+    // Rim disruption runs every frame for responsiveness (lightweight)
+    if (hoop && autoActive && frameN % 2 === 0) {
+      detectRimDisruption();
+      checkDisruptionMake();
+    }
+
     // Adaptive detection frequency
     if (modelReady && frameN % detectInterval === 0) runDetect();
   }
@@ -425,44 +469,415 @@ function startLoop() {
 }
 
 async function runDetect() {
-  if (detecting || !modelReady) return;
+  if (detecting) return;
   detecting = true;
   try {
-    const preds = await tfModel.detect(video);
-    // Dynamic threshold: lower for small (distant) balls
-    const balls = preds.filter(p => {
-      if (p.class !== 'sports ball') return false;
-      const area = p.bbox[2] * p.bbox[3];
-      const minScore = area < 2500 ? 0.20 : 0.30;
-      return p.score > minScore;
-    });
-    if (balls.length) {
-      const b = balls.reduce((a,c)=>c.score>a.score?c:a);
-      const [bx,by,bw,bh] = b.bbox;
-      const scX = canvas.width  / video.videoWidth;
-      const scY = canvas.height / video.videoHeight;
-      const cx = (bx + bw/2) * scX;
-      const cy = (by + bh/2) * scY;
-      const r  = (bw/2) * scX;
-      lastBall = { cx, cy, r, score:b.score, ts:Date.now() };
-      addHistory(cx, cy);
+    let found = false;
+
+    // ── PRIMARY: COCO-SSD model detection ──
+    if (modelReady) {
+      const preds = await tfModel.detect(video);
+      const balls = preds.filter(p => {
+        if (p.class !== 'sports ball') return false;
+        const area = p.bbox[2] * p.bbox[3];
+        // Lower threshold for small balls at distance (outdoor courts)
+        const minScore = area < 1500 ? 0.12 : area < 3000 ? 0.18 : 0.25;
+        return p.score > minScore;
+      });
+      if (balls.length) {
+        // Prefer ball closest to hoop if hoop is set, otherwise highest score
+        let b;
+        if (hoop && balls.length > 1) {
+          const hx = hoop.nx * video.videoWidth;
+          const hy = hoop.ny * video.videoHeight;
+          b = balls.reduce((best, cur) => {
+            const [bx,by,bw,bh] = cur.bbox;
+            const dist = Math.sqrt((bx+bw/2-hx)**2 + (by+bh/2-hy)**2);
+            const [bbx,bby,bbw,bbh] = best.bbox;
+            const bestDist = Math.sqrt((bbx+bbw/2-hx)**2 + (bby+bbh/2-hy)**2);
+            // Weight: score matters more, but proximity is a tiebreaker
+            return (cur.score - dist/video.videoWidth*0.3) > (best.score - bestDist/video.videoWidth*0.3) ? cur : best;
+          });
+        } else {
+          b = balls.reduce((a,c)=>c.score>a.score?c:a);
+        }
+        const [bx,by,bw,bh] = b.bbox;
+        const scX = canvas.width  / video.videoWidth;
+        const scY = canvas.height / video.videoHeight;
+        const cx = (bx + bw/2) * scX;
+        const cy = (by + bh/2) * scY;
+        const r  = (bw/2) * scX;
+        // Verify COCO-SSD detection with color check for low-confidence small detections
+        if (b.score < 0.20) {
+          const colorOk = verifyBallColor(bx, by, bw, bh);
+          if (!colorOk) { detecting = false; return; }
+        }
+        lastBall = { cx, cy, r, score:b.score, ts:Date.now() };
+        addHistory(cx, cy);
+        found = true;
+      }
+    }
+
+    // ── FALLBACK: Orange color detection near hoop ──
+    if (!found && hoop) {
+      const colorBall = detectBallByColor();
+      if (colorBall) {
+        // Filter out static detections (stuck on same spot = static object, not ball)
+        if (!isStaticDetection(colorBall.cx, colorBall.cy)) {
+          lastBall = { cx:colorBall.cx, cy:colorBall.cy, r:colorBall.r, score:0.5, ts:Date.now() };
+          addHistory(colorBall.cx, colorBall.cy);
+          found = true;
+        }
+      }
+    }
+
+    if (found) {
       checkMake();
-      detectInterval = 2; // track more aggressively when ball visible
+      detectInterval = 2;
     } else {
       if (lastBall && Date.now()-lastBall.ts > 1200) {
         lastBall = null;
-        detectInterval = 6; // conserve CPU when no ball
+        detectInterval = 6;
       }
-      checkBallLostMiss(); // check if ball was lost near hoop → miss
+      checkBallLostMiss();
     }
   } catch(e){}
   detecting = false;
+}
+
+// ── VERIFY BALL COLOR (for low-confidence COCO-SSD detections) ──────────
+function verifyBallColor(bx, by, bw, bh) {
+  // Sample pixels from the detected bounding box center to confirm ball-like color
+  const verifyCanvas = document.createElement('canvas');
+  const vctx = verifyCanvas.getContext('2d', { willReadFrequently: true });
+  const sampleW = 16, sampleH = 16;
+  verifyCanvas.width = sampleW; verifyCanvas.height = sampleH;
+  // Draw center region of bbox from video
+  const cx = bx + bw * 0.25, cy = by + bh * 0.25;
+  const cw = bw * 0.5, ch = bh * 0.5;
+  vctx.drawImage(video, cx, cy, cw, ch, 0, 0, sampleW, sampleH);
+  const data = vctx.getImageData(0, 0, sampleW, sampleH).data;
+  let ballPx = 0, total = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    total++;
+    if (isBallColor(data[i], data[i+1], data[i+2])) ballPx++;
+  }
+  return (ballPx / total) > 0.25; // at least 25% of center pixels match ball color
+}
+
+// ── BACKGROUND-SUBTRACTION COLOR BALL DETECTION ─────────────────────────
+// Builds a static background mask of permanently ball-colored pixels
+// (hoop rim, buildings, etc.), then isolates only NEW ball-colored pixels
+// that appear in each frame — these are the moving ball.
+const colorCanvas = document.createElement('canvas');
+const colorCtx = colorCanvas.getContext('2d', { willReadFrequently: true });
+const COLOR_W = 360; // analysis resolution
+const COLOR_H = 320;
+let bgMask = null;          // Uint8Array — 1 = static ball-colored pixel
+let bgBuildCount = 0;       // how many frames contributed to bgMask
+let bgAccum = null;         // accumulator for building background
+const BG_FRAMES_NEEDED = 8; // frames to build a stable background
+
+function buildBackgroundFrame() {
+  if (!hoop || !camOn) return;
+  // Scan top portion of frame (ball flight area above + around hoop)
+  const scanH = Math.min(video.videoHeight, video.videoHeight * (hoop.ny + 0.18));
+  colorCanvas.width = COLOR_W; colorCanvas.height = COLOR_H;
+  colorCtx.drawImage(video, 0, 0, video.videoWidth, scanH, 0, 0, COLOR_W, COLOR_H);
+  const data = colorCtx.getImageData(0, 0, COLOR_W, COLOR_H).data;
+
+  if (!bgAccum) bgAccum = new Uint8Array(COLOR_W * COLOR_H);
+
+  for (let y = 0; y < COLOR_H; y++) {
+    for (let x = 0; x < COLOR_W; x++) {
+      const i = (y * COLOR_W + x) * 4;
+      if (isBallColor(data[i], data[i+1], data[i+2])) {
+        bgAccum[y * COLOR_W + x]++;
+      }
+    }
+  }
+  bgBuildCount++;
+
+  if (bgBuildCount >= BG_FRAMES_NEEDED) {
+    bgMask = new Uint8Array(COLOR_W * COLOR_H);
+    const threshold = Math.floor(BG_FRAMES_NEEDED * 0.4);
+    for (let i = 0; i < bgAccum.length; i++) {
+      if (bgAccum[i] >= threshold) bgMask[i] = 1;
+    }
+  }
+}
+
+function resetBackground() {
+  bgMask = null; bgAccum = null; bgBuildCount = 0;
+}
+
+function detectBallByColor() {
+  if (!hoop || !camOn) return null;
+  if (!bgMask) { buildBackgroundFrame(); return null; }
+
+  // Scan same region as background was built from
+  const scanH = Math.min(video.videoHeight, video.videoHeight * (hoop.ny + 0.18));
+  colorCanvas.width = COLOR_W; colorCanvas.height = COLOR_H;
+  colorCtx.drawImage(video, 0, 0, video.videoWidth, scanH, 0, 0, COLOR_W, COLOR_H);
+  const data = colorCtx.getImageData(0, 0, COLOR_W, COLOR_H).data;
+
+  // Find NEW ball-colored pixels not in static background
+  const newPx = [];
+  for (let y = 0; y < COLOR_H; y++) {
+    for (let x = 0; x < COLOR_W; x++) {
+      const idx = y * COLOR_W + x;
+      if (bgMask[idx]) continue; // skip static background
+      const i = idx * 4;
+      if (isBallColor(data[i], data[i+1], data[i+2])) {
+        newPx.push(x, y); // flat pairs for speed
+      }
+    }
+  }
+
+  if (newPx.length < 6) return null; // need at least 3 pixels (6 values)
+
+  // Grid-based clustering: bin into cells, find densest cluster
+  const CELL = 10;
+  const grid = {};
+  for (let i = 0; i < newPx.length; i += 2) {
+    const key = (Math.floor(newPx[i]/CELL)) + ',' + (Math.floor(newPx[i+1]/CELL));
+    if (!grid[key]) grid[key] = { sx: 0, sy: 0, n: 0, cx: Math.floor(newPx[i]/CELL), cy: Math.floor(newPx[i+1]/CELL) };
+    grid[key].sx += newPx[i]; grid[key].sy += newPx[i+1]; grid[key].n++;
+  }
+
+  // Merge neighboring dense cells into clusters
+  const cells = Object.values(grid).filter(c => c.n >= 2);
+  if (!cells.length) return null;
+
+  cells.sort((a,b) => b.n - a.n);
+  const clusters = [];
+  const used = new Set();
+
+  for (let i = 0; i < cells.length; i++) {
+    if (used.has(i)) continue;
+    const cluster = [cells[i]]; used.add(i);
+    // BFS: merge adjacent cells
+    let qi = 0;
+    while (qi < cluster.length) {
+      const c = cluster[qi++];
+      for (let j = 0; j < cells.length; j++) {
+        if (used.has(j)) continue;
+        if (Math.abs(cells[j].cx - c.cx) <= 2 && Math.abs(cells[j].cy - c.cy) <= 2) {
+          cluster.push(cells[j]); used.add(j);
+        }
+      }
+    }
+    const totalN = cluster.reduce((s,c) => s + c.n, 0);
+    const avgX = cluster.reduce((s,c) => s + c.sx, 0) / totalN;
+    const avgY = cluster.reduce((s,c) => s + c.sy, 0) / totalN;
+    // Compute bounding box for compactness check
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const c of cluster) {
+      minX = Math.min(minX, c.cx); maxX = Math.max(maxX, c.cx);
+      minY = Math.min(minY, c.cy); maxY = Math.max(maxY, c.cy);
+    }
+    const bboxW = (maxX - minX + 1) * CELL;
+    const bboxH = (maxY - minY + 1) * CELL;
+    const aspect = bboxW > 0 && bboxH > 0 ? Math.max(bboxW, bboxH) / Math.min(bboxW, bboxH) : 99;
+    clusters.push({ cx: avgX, cy: avgY, n: totalN, cells: cluster.length, aspect, bboxW, bboxH });
+  }
+
+  // Pick best candidate: prefer small-to-medium ROUND clusters near the hoop
+  // (person = large cluster, ball = 5-50 cells, buildings = wide/tall non-round)
+  const hoopSX = hoop.nx * COLOR_W;
+  const hoopSY = hoop.ny / (hoop.ny + 0.18) * COLOR_H;
+
+  let best = null, bestScore = -1;
+  for (const cl of clusters) {
+    if (cl.n < 3) continue;
+    if (cl.cells > 60) continue; // too large, probably person or building
+    if (cl.aspect > 3.5) continue; // too elongated (buildings, fence), ball is roughly round
+    const dist = Math.sqrt((cl.cx - hoopSX)**2 + (cl.cy - hoopSY)**2);
+    const distScore = Math.max(0, 1 - dist / (COLOR_W * 0.5));
+    const sizeScore = cl.n >= 5 && cl.n <= 150 ? 1 : 0.3;
+    // Bonus for round clusters (aspect close to 1.0)
+    const roundBonus = cl.aspect < 2.0 ? 1.2 : 1.0;
+    const score = distScore * sizeScore * cl.n * roundBonus;
+    if (score > bestScore) { bestScore = score; best = cl; }
+  }
+
+  if (!best || best.n < 3) return null;
+
+  // Convert to canvas coordinates
+  const ballCx = (best.cx / COLOR_W) * canvas.width;
+  const ballCy = (best.cy / COLOR_H) * (scanH / video.videoHeight) * canvas.height;
+  const approxR = Math.sqrt(best.cells) * CELL / 2 * (canvas.width / COLOR_W);
+
+  if (approxR > canvas.width * 0.12 || approxR < 2) return null;
+
+  return { cx: ballCx, cy: ballCy, r: approxR };
+}
+
+// ── STATIC DETECTION FILTER ─────────────────────────────────────────────
+// Reject color detections that are stuck on the same spot (static objects)
+function isStaticDetection(cx, cy) {
+  if (!lastDetectPos) {
+    lastDetectPos = { cx, cy };
+    staticDetectCount = 1;
+    return false;
+  }
+  const dist = Math.sqrt((cx - lastDetectPos.cx)**2 + (cy - lastDetectPos.cy)**2);
+  if (dist < 15) {
+    staticDetectCount++;
+    lastDetectPos = { cx, cy };
+    return staticDetectCount >= STATIC_THRESHOLD;
+  } else {
+    lastDetectPos = { cx, cy };
+    staticDetectCount = 1;
+    return false;
+  }
+}
+
+// ── RIM DISRUPTION DETECTOR ─────────────────────────────────────────────
+// Detects frame-to-frame pixel changes in a small zone around the hoop
+// to identify when the ball passes through the net
+function detectRimDisruption() {
+  if (!hoop || !camOn) return 0;
+  const vw = video.videoWidth, vh = video.videoHeight;
+  const hx = hoop.nx * vw, hy = hoop.ny * vh;
+  const hr = HOOP_R_NORM * vw;
+
+  const zw = hr * 3, zh = hr * 2.5;
+  const sx = Math.max(0, hx - zw / 2);
+  const sy = Math.max(0, hy - zh * 0.4);
+  const sw = Math.min(zw, vw - sx);
+  const sh = Math.min(zh, vh - sy);
+
+  disruptCanvas.width = DISRUPT_SIZE;
+  disruptCanvas.height = DISRUPT_SIZE;
+  disruptCtx.drawImage(video, sx, sy, sw, sh, 0, 0, DISRUPT_SIZE, DISRUPT_SIZE);
+  const data = disruptCtx.getImageData(0, 0, DISRUPT_SIZE, DISRUPT_SIZE).data;
+
+  if (!prevRimData) {
+    prevRimData = new Uint8Array(data);
+    return 0;
+  }
+
+  let totalDiff = 0, count = 0;
+  const margin = Math.floor(DISRUPT_SIZE * 0.15);
+  for (let y = 0; y < DISRUPT_SIZE; y++) {
+    for (let x = margin; x < DISRUPT_SIZE - margin; x++) {
+      const i = (y * DISRUPT_SIZE + x) * 4;
+      totalDiff += Math.abs(data[i] - prevRimData[i]);
+      totalDiff += Math.abs(data[i+1] - prevRimData[i+1]);
+      totalDiff += Math.abs(data[i+2] - prevRimData[i+2]);
+      count++;
+    }
+  }
+  const avgDiff = count > 0 ? totalDiff / (count * 3) : 0;
+
+  prevRimData = new Uint8Array(data);
+  const now = Date.now();
+  rimScores.push({ ts: now, score: avgDiff });
+  rimScores = rimScores.filter(s => now - s.ts < 5000);
+
+  return avgDiff;
+}
+
+// Check if rim disruption indicates a make (ball passing through net)
+function checkDisruptionMake() {
+  const now = Date.now();
+  if (!hoop || now - lastAutoTs < COOLDOWN || now - lastDisruptMakeTs < DISRUPT_COOLDOWN) return;
+  if (rimScores.length < 5) return;
+
+  const recent = rimScores.filter(s => now - s.ts < 600);
+  if (recent.length < 2) return;
+  const peakScore = Math.max(...recent.map(s => s.score));
+
+  // Reject absurdly high peaks (person physically at hoop, not ball)
+  if (peakScore > 20) return;
+
+  const baseline = rimScores.filter(s => now - s.ts > 1500 && now - s.ts < 4500);
+  const baseAvg = baseline.length > 2
+    ? baseline.reduce((s, v) => s + v.score, 0) / baseline.length
+    : 2;
+
+  const dynThreshold = Math.max(3.8, baseAvg * 2.5);
+  if (peakScore > dynThreshold) {
+    const last10 = rimScores.slice(-10);
+    const highCount = last10.filter(s => s.score > dynThreshold * 0.6).length;
+    if (highCount > 6) return; // sustained motion (camera shake), not ball transit
+
+    lastDisruptMakeTs = now;
+    lastAutoTs = now;
+    if (shotAttempt) shotAttempt = null;
+    logShot(true, true);
+    popMake();
+    showDetectZone('MAKE (net)', '#22c55e');
+  }
+}
+
+// Classify shot attempt using rim disruption (primary) + ball tracking (secondary)
+function classifyShotAttempt(attempt, now) {
+  const windowStart = attempt.startTs - 500;
+  const windowEnd = now + 2000;
+  const shotRim = rimScores.filter(s => s.ts >= windowStart && s.ts <= windowEnd);
+  const peakDuringShot = shotRim.length ? Math.max(...shotRim.map(s => s.score)) : 0;
+
+  const baselineRim = rimScores.filter(s => s.ts < windowStart - 500 && s.ts > windowStart - 5000);
+  const baseAvg = baselineRim.length > 2
+    ? baselineRim.reduce((s,v) => s + v.score, 0) / baselineRim.length
+    : 1.5;
+
+  const highFrames = shotRim.filter(s => s.score > Math.max(3.5, baseAvg * 2));
+  const isBrief = highFrames.length <= 6;
+  const isReasonable = peakDuringShot < 20;
+
+  const dynThreshold = Math.max(3.8, baseAvg * 2.5);
+  if (peakDuringShot > dynThreshold && isBrief && isReasonable) return true;
+  if (attempt.ballBelowCenter) return true;
+  return false;
+}
+
+function isBallColor(r, g, b) {
+  // Use HSV for more robust color detection across lighting conditions
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const delta = max - min;
+  const sat = max === 0 ? 0 : delta / max;
+  const val = max / 255;
+  let hue = 0;
+  if (delta > 0) {
+    if (max === r) hue = 60 * (((g - b) / delta) % 6);
+    else if (max === g) hue = 60 * ((b - r) / delta + 2);
+    else hue = 60 * ((r - g) / delta + 4);
+    if (hue < 0) hue += 360;
+  }
+
+  // HSV-based basketball detection: hue 10-40 (orange/tan), moderate sat, decent brightness
+  // Covers bright orange, tan leather, and muted overcast-lit balls
+  if (hue >= 8 && hue <= 42 && sat >= 0.15 && val >= 0.35 && r > g && r > b) return true;
+  // Wider hue for very saturated orange balls: hue 5-50
+  if (hue >= 5 && hue <= 50 && sat >= 0.30 && val >= 0.40) return true;
+
+  // RGB fallbacks for edge cases the HSV may miss
+  // Bright orange basketball (new Spalding/Wilson): R>160, G 60-180, B<120
+  if (r > 160 && g > 50 && g < 190 && b < 120 && r > g && r > b * 1.5) return true;
+  // Brown/tan leather ball at distance (Wilson NCAA): muted color, wider G/B ranges
+  if (r > 110 && g > 70 && g < 150 && b > 45 && b < 125 && r > g * 1.05 && r > b * 1.2 && delta > 15) return true;
+  // Dark worn ball / shadow: R>95, G 50-100, B<85, R clearly dominant
+  if (r > 95 && g > 45 && g < 105 && b < 88 && r > g * 1.15 && r > b * 1.4) return true;
+  return false;
 }
 
 // ── BALL HISTORY ─────────────────────────────────────────────────────────
 function addHistory(cx, cy) {
   const now = Date.now();
   ballHistory = ballHistory.filter(p=>now-p.ts<2500);
+  // Temporal consistency: reject detections that jump too far from last known position
+  if (ballHistory.length > 0) {
+    const last = ballHistory[ballHistory.length - 1];
+    const dt = (now - last.ts) / 1000;
+    if (dt > 0 && dt < 1) {
+      const dist = Math.sqrt((cx - last.cx)**2 + (cy - last.cy)**2);
+      const maxSpeed = canvas.width * 2; // max px/sec the ball can travel
+      if (dist > maxSpeed * dt) return; // teleport → reject
+    }
+  }
   ballHistory.push({cx, cy, ts:now});
   if (ballHistory.length > 60) ballHistory.shift();
 }
@@ -487,78 +902,76 @@ function predictBall() {
 }
 
 // ── AUTO SHOT DETECTION (MAKE + MISS) ────────────────────────────────────
+// Strategy: track when ball enters hoop area, then check WHERE the ball
+// goes after. MAKE = ball passes below hoop still centered. MISS = ball
+// deflects sideways or bounces back up.
 function checkMake() {
   if (!hoop || Date.now()-lastAutoTs < COOLDOWN) return;
-  if (ballHistory.length < 3) return;
+  if (ballHistory.length < 2) return;
 
   const now = Date.now();
   const hx = hoop.nx * canvas.width;
   const hy = hoop.ny * canvas.height;
   const hr = HOOP_R_NORM * canvas.width;
 
-  // Build points to check: recent actual + predicted
-  const recent = ballHistory.filter(p=>now-p.ts<1500);
-  const predicted = predictBall();
-  const pts = predicted ? [...recent, predicted] : recent;
-  if (pts.length < 2) return;
+  const recent = ballHistory.filter(p=>now-p.ts<2000);
+  if (recent.length < 2) return;
 
-  const lastPt = pts[pts.length-1];
+  const lastPt = recent[recent.length-1];
   const dx = Math.abs(lastPt.cx - hx);
   const dy = lastPt.cy - hy;
 
-  // Check if ball is in the "shot zone" — near the hoop horizontally, above or at hoop level
-  const inShotZone = dx < hr * SHOT_ZONE_SIDE && dy < hr * 2 && dy > -canvas.height * SHOT_ZONE_ABOVE;
+  // Shot zone: ball is near the hoop area
+  const inShotZone = dx < hr * SHOT_ZONE_SIDE && dy < hr * 3 && dy > -canvas.height * SHOT_ZONE_ABOVE;
 
-  // ── MAKE detection: ball crosses downward through hoop ──
-  const makeHr = hr * 1.2; // slightly wider tolerance for makes
-  for (let i=1; i<pts.length; i++) {
-    const p1=pts[i-1], p2=pts[i];
-    if (p2.cy <= p1.cy) continue;             // must move downward
-    if (p1.cy >= hy    || p2.cy < hy) continue; // must cross hoop y
-    const t = (hy - p1.cy) / (p2.cy - p1.cy);
-    const crossX = p1.cx + t*(p2.cx-p1.cx);
-    if (Math.abs(crossX - hx) < makeHr) {
-      lastAutoTs = now;
-      shotAttempt = null; // reset attempt
-      logShot(true, true);
-      popMake();
-      showDetectZone('MAKE', '#22c55e');
-      return;
-    }
-  }
-
-  // ── SHOT ATTEMPT tracking (for miss detection) ──
+  // ── SHOT ATTEMPT tracking ──
   if (inShotZone && !shotAttempt) {
-    // Ball just entered shot zone — start tracking attempt
-    shotAttempt = { startTs: now, resolved: false };
+    shotAttempt = { startTs: now, resolved: false, ballBelowCenter: false, ballGone: false, goneTs: 0, peakRim: 0 };
     showDetectZone('TRACKING...', '#a855f7');
   }
 
   if (shotAttempt && !shotAttempt.resolved) {
-    // Ball was near hoop but is now moving away below hoop level (bounced off rim/backboard)
-    const ballBelow = lastPt.cy > hy + hr * 3;
-    const ballFarSide = dx > hr * SHOT_ZONE_SIDE * 1.5;
     const elapsed = now - shotAttempt.startTs;
 
-    if ((ballBelow || ballFarSide) && elapsed > 400) {
-      // Ball bounced away — miss
-      shotAttempt.resolved = true;
-      shotAttempt = null;
-      lastAutoTs = now;
-      logShot(false, true);
-      popMiss();
-      showDetectZone('MISS', '#ef4444');
-      return;
+    // Track rim disruption peak during shot
+    const shotRim = rimScores.filter(s => s.ts >= shotAttempt.startTs && s.ts <= now);
+    const peakDuringShot = shotRim.length ? Math.max(...shotRim.map(s => s.score)) : 0;
+    if (peakDuringShot > shotAttempt.peakRim) shotAttempt.peakRim = peakDuringShot;
+
+    // Ball position tracking (secondary make signal)
+    const ballJustBelow = lastPt.cy > hy - hr * 0.5 && lastPt.cy < hy + hr * 2.5;
+    const ballCentered = Math.abs(lastPt.cx - hx) < hr * 1.2;
+    const prevPt = recent.length >= 2 ? recent[recent.length - 2] : null;
+    const prevNearHoop = !prevPt || prevPt.cy > hy - hr * 0.5;
+    if (ballJustBelow && ballCentered && prevNearHoop && elapsed > 150) {
+      shotAttempt.ballBelowCenter = true;
     }
 
-    // Timeout: ball has been near hoop too long without a make (stuck/lost)
-    if (elapsed > MISS_TIMEOUT) {
+    // Ball has left the zone — mark but wait for rim disruption
+    const ballFarBelow = lastPt.cy > hy + hr * 4;
+    const ballFarSide = dx > hr * SHOT_ZONE_SIDE * 1.8;
+    if ((ballFarBelow || ballFarSide) && elapsed > 300 && !shotAttempt.ballGone) {
+      shotAttempt.ballGone = true;
+      shotAttempt.goneTs = now;
+    }
+
+    // Resolve: wait for rim disruption data after ball gone, or timeout
+    const goneWaited = shotAttempt.ballGone && (now - shotAttempt.goneTs > 1500);
+    if (goneWaited || elapsed > MISS_TIMEOUT) {
       shotAttempt.resolved = true;
+      const isMake = classifyShotAttempt(shotAttempt, now);
       shotAttempt = null;
       lastAutoTs = now;
-      logShot(false, true);
-      popMiss();
-      showDetectZone('MISS', '#ef4444');
+
+      if (isMake) {
+        logShot(true, true);
+        popMake();
+        showDetectZone('MAKE', '#22c55e');
+      } else {
+        logShot(false, true);
+        popMiss();
+        showDetectZone('MISS', '#ef4444');
+      }
       return;
     }
   }
@@ -571,12 +984,19 @@ function checkBallLostMiss() {
   const now = Date.now();
   // If ball hasn't been seen for a while after entering shot zone
   if (lastBall && now - lastBall.ts > BALL_LOST_MISS) {
+    const isMake = classifyShotAttempt(shotAttempt, now);
     shotAttempt.resolved = true;
     shotAttempt = null;
     lastAutoTs = now;
-    logShot(false, true);
-    popMiss();
-    showDetectZone('MISS (lost)', '#ef4444');
+    if (isMake) {
+      logShot(true, true);
+      popMake();
+      showDetectZone('MAKE', '#22c55e');
+    } else {
+      logShot(false, true);
+      popMiss();
+      showDetectZone('MISS (lost)', '#ef4444');
+    }
   }
 }
 
@@ -666,6 +1086,10 @@ function popMake() {
 
 $('btn-undo').onclick = ()=>{ shots.pop(); updateUI(); };
 $('btn-reset').onclick= ()=>{ if(confirm('Reset session?')){ shots=[]; sessionStartTs=null; updateUI(); } };
+
+// ── MANUAL TAP ZONES (fallback when auto-detection misses) ──
+$('tap-make').onclick = (e)=>{ e.stopPropagation(); logShot(true); popMake(); };
+$('tap-miss').onclick = (e)=>{ e.stopPropagation(); logShot(false); popMiss(); };
 
 // ── UI UPDATE ────────────────────────────────────────────────────────────
 function updateUI() {
