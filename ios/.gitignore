@@ -1,0 +1,20 @@
+# XcodeGen generates this from project.yml
+ShotTracker.xcodeproj/
+
+# Xcode build products
+build/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# User state
+xcuserdata/
+*.xcuserstate
+
+# Swift Package Manager (if we add deps later)
+.swiftpm/
+Package.resolved
+
+# macOS clutter
+.DS_Store
