@@ -34,6 +34,11 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSRequiresIPhoneOS: true
+        # App does not use any encryption beyond Apple's built-in OS APIs, so it
+        # qualifies for the US Export Administration Regulations exemption.
+        # Declaring this here stops App Store Connect from prompting on every
+        # build upload.
+        ITSAppUsesNonExemptEncryption: false
         NSCameraUsageDescription: "Shot Tracker uses the camera to automatically track your makes and misses while you shoot hoops."
         UILaunchScreen:
           UIColorName: ""
