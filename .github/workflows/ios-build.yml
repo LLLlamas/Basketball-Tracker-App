@@ -25,73 +25,78 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  XCODE_VERSION: "16.1"
   SCHEME: ShotTracker
   CONFIGURATION: Release
   BUNDLE_ID: com.basketballtracker.app
 
 jobs:
   build:
-    name: Build & test (unsigned)
+    name: Build & test (simulator, unsigned)
     runs-on: macos-15
     timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ios
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+      - name: Select Xcode 16.4
+        # XcodeGen 2.45+ emits objectVersion 77 (Xcode 16 format), so macos-14 / Xcode 15.x fails
+        # with "Unable to read project". Xcode 16.2 fails differently: its bundled iOS SDK
+        # (build 22C146) doesn't match any simulator runtime preinstalled on macos-15.
+        # 16.4 ships an iOS 18.4/18.5 SDK that lines up with runtimes the runner actually has.
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.4"
 
-      - name: Show Xcode version
-        run: xcodebuild -version
+      - name: Show Xcode + runtime info
+        working-directory: .
+        run: |
+          xcodebuild -version
+          echo "--- iOS simulator runtimes ---"
+          xcrun simctl list runtimes | grep -i iOS || true
 
       - name: Install tooling
+        working-directory: .
         run: brew install xcodegen librsvg xcbeautify
 
       - name: Generate app icon from SVG
+        working-directory: .
         run: |
           rsvg-convert -w 1024 -h 1024 icons/icon.svg \
             -o ios/ShotTracker/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png
 
       - name: Generate Xcode project
-        working-directory: ios
         run: |
           xcodegen version
           xcodegen generate --spec project.yml
-          echo "--- top-level ---"
-          ls -la
-          echo "--- .xcodeproj contents ---"
-          ls -la ShotTracker.xcodeproj
-          echo "--- pbxproj header (first 30 lines — tells us objectVersion) ---"
-          head -30 ShotTracker.xcodeproj/project.pbxproj
-          echo "--- xcodebuild -list ---"
           xcodebuild -project ShotTracker.xcodeproj -list
 
-      - name: Build (no signing)
-        working-directory: ios
+      - name: Build (simulator, no signing)
         run: |
           set -o pipefail
-          xcodebuild \
-            -project ShotTracker.xcodeproj \
-            -scheme "$SCHEME" \
-            -configuration "$CONFIGURATION" \
-            -sdk iphoneos \
-            -destination "generic/platform=iOS" \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            build 2>&1 | xcbeautify
-
-      - name: Run unit tests
-        working-directory: ios
-        run: |
-          set -o pipefail
-          xcodebuild \
+          xcodebuild build \
             -project ShotTracker.xcodeproj \
             -scheme "$SCHEME" \
             -configuration Debug \
-            -sdk iphonesimulator \
             -destination "platform=iOS Simulator,name=iPhone 16,OS=latest" \
-            test 2>&1 | xcbeautify
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | xcbeautify
+
+      - name: Run unit tests
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project ShotTracker.xcodeproj \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,name=iPhone 16,OS=latest" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | xcbeautify
 
   testflight:
     name: Archive & upload to TestFlight
@@ -100,22 +105,28 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 30
     environment: testflight
+    defaults:
+      run:
+        working-directory: ios
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_${{ env.XCODE_VERSION }}.app
+      - name: Select Xcode 16.4
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: "16.4"
 
       - name: Install tooling
+        working-directory: .
         run: brew install xcodegen librsvg xcbeautify
 
       - name: Generate app icon from SVG
+        working-directory: .
         run: |
           rsvg-convert -w 1024 -h 1024 icons/icon.svg \
             -o ios/ShotTracker/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png
 
       - name: Generate Xcode project
-        working-directory: ios
         env:
           DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
         run: xcodegen generate
@@ -136,7 +147,6 @@ jobs:
           api-private-key: ${{ secrets.APPSTORE_PRIVATE_KEY }}
 
       - name: Write ExportOptions.plist
-        working-directory: ios
         run: |
           cat > ExportOptions.plist <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -158,10 +168,9 @@ jobs:
           EOF
 
       - name: Archive
-        working-directory: ios
         run: |
           set -o pipefail
-          xcodebuild \
+          xcodebuild archive \
             -project ShotTracker.xcodeproj \
             -scheme "$SCHEME" \
             -configuration "$CONFIGURATION" \
@@ -170,10 +179,9 @@ jobs:
             -archivePath build/ShotTracker.xcarchive \
             DEVELOPMENT_TEAM=${{ secrets.APPLE_TEAM_ID }} \
             CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            archive 2>&1 | xcbeautify
+            2>&1 | xcbeautify
 
       - name: Export IPA
-        working-directory: ios
         run: |
           xcodebuild \
             -exportArchive \

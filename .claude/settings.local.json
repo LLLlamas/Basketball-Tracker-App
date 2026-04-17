@@ -6,7 +6,8 @@
       "Read(//c/Users/fines/Downloads//**)",
       "Read(//c/Users/fines/shottracker-signing/**)",
       "Bash(xxd distribution.cer)",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(choco install *)"
     ]
   }
 }

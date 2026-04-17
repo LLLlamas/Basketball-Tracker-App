@@ -7,16 +7,15 @@ enum CameraError: Error {
     case notAuthorized
 }
 
-@MainActor
 final class CameraManager: ObservableObject {
     let session = AVCaptureSession()
     private let videoOutput = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "shottracker.camera.session")
-    private let frameQueue = DispatchQueue(label: "shottracker.camera.frames", qos: .userInitiated)
 
     @Published private(set) var isAuthorized = false
     @Published private(set) var isConfigured = false
 
+    @MainActor
     func requestAuthorization() async -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
@@ -33,21 +32,20 @@ final class CameraManager: ObservableObject {
     }
 
     func configure() async throws {
-        guard !isConfigured else { return }
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             sessionQueue.async {
                 do {
-                    try self.configureSession()
+                    try self.configureSessionOnQueue()
                     cont.resume()
                 } catch {
                     cont.resume(throwing: error)
                 }
             }
         }
-        isConfigured = true
+        await MainActor.run { self.isConfigured = true }
     }
 
-    private func configureSession() throws {
+    private func configureSessionOnQueue() throws {
         session.beginConfiguration()
         defer { session.commitConfiguration() }
 
@@ -85,28 +83,26 @@ final class CameraManager: ObservableObject {
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ]
         videoOutput.alwaysDiscardsLateVideoFrames = true
-        // Frame delegate left nil until Phase 1 (detection pipeline).
         guard session.canAddOutput(videoOutput) else { throw CameraError.inputFailed }
         session.addOutput(videoOutput)
 
-        if let connection = videoOutput.connection(with: .video) {
-            if connection.isVideoRotationAngleSupported(90) {
-                connection.videoRotationAngle = 90
-            }
+        if let connection = videoOutput.connection(with: .video),
+           connection.isVideoRotationAngleSupported(90) {
+            connection.videoRotationAngle = 90
         }
     }
 
     func start() {
-        sessionQueue.async { [weak self] in
-            guard let self, !self.session.isRunning else { return }
-            self.session.startRunning()
+        sessionQueue.async { [session] in
+            guard !session.isRunning else { return }
+            session.startRunning()
         }
     }
 
     func stop() {
-        sessionQueue.async { [weak self] in
-            guard let self, self.session.isRunning else { return }
-            self.session.stopRunning()
+        sessionQueue.async { [session] in
+            guard session.isRunning else { return }
+            session.stopRunning()
         }
     }
 }
