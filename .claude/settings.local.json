@@ -7,7 +7,8 @@
       "Read(//c/Users/fines/shottracker-signing/**)",
       "Bash(xxd distribution.cer)",
       "Bash(gh run *)",
-      "Bash(choco install *)"
+      "Bash(choco install *)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

@@ -124,12 +124,22 @@ const motionCanvas = document.createElement('canvas');
 const motionCtx = motionCanvas.getContext('2d', { willReadFrequently: true });
 
 // ── DETECTION CONSTANTS ──
+// Keep these in sync with ios/ShotTracker/Detection/DetectionConstants.swift.
 const HOOP_R_NORM = 0.09;
 const COOLDOWN = 4000;
-const SHOT_ZONE_ABOVE = 0.25;
-const SHOT_ZONE_SIDE = 2.0;
-const MISS_TIMEOUT = 3000;   // extended to allow rim disruption time to register
+const SHOT_ZONE_ABOVE = 0.18;       // tightened from 0.25
+const SHOT_ZONE_SIDE = 1.4;         // tightened from 2.0
+const MISS_TIMEOUT = 3000;          // extended to allow rim disruption time to register
 const BALL_LOST_MISS = 3500;
+
+// Ball-gating for disruption-only makes: reject a rim-diff peak unless a ball
+// sample was seen within this window and within this multiple of hoop radius.
+const DISRUPT_BALL_RECENCY_MS = 1500;
+const DISRUPT_BALL_RADIUS_MULT = 2.5;
+
+// Attempt entry: ball must be moving downward (dy increasing over recent trail)
+// before an attempt opens. Held/dribbled balls no longer open phantom attempts.
+const ATTEMPT_MIN_DOWNWARD_DY_NORM = 0.006;
 
 // ── RIM DISRUPTION DETECTION ──
 // Frame-differencing in hoop zone to detect ball passing through
@@ -206,8 +216,7 @@ function updateEntry(id, field, value) {
 }
 
 // ── Add default test videos ──
-addTestEntry('make_miss_full.mov', '0.44', '0.47', 'M,X,X,X,M,M,X');
-addTestEntry('all_makes.mp4', '0.33', '0.42', 'M,M,M,M');
+// Adjust hoop nx,ny to where the rim center is in the frame (0..1 normalized).
 addTestEntry('stationary 1.MOV', '0.47', '0.22', 'M,X,X,M,M,X,X,M,M,X');
 addTestEntry('stationary 2.MOV', '0.47', '0.22', 'X,M,M,X,M,M,M');
 
@@ -277,6 +286,7 @@ async function runSingleTest(entry) {
   shots = []; ballHistory = []; lastBall = null;
   lastAutoTs = 0; shotAttempt = null;
   bgMask = null; bgAccum = null; bgBuildCount = 0;
+  prevColorFrame = null;
   prevRimData = null; rimScores = []; lastDisruptMakeTs = 0;
   staticDetectCount = 0; lastDetectPos = null;
   logEl.innerHTML = '';
@@ -434,8 +444,16 @@ function checkMake(now) {
   const inZone = dx < hr*SHOT_ZONE_SIDE && dy < hr*3 && dy > -overlay.height*SHOT_ZONE_ABOVE;
 
   if (inZone && !shotAttempt) {
-    shotAttempt = { startTs: now, ballBelowCenter: false, peakRim: 0 };
-    log(`[${(now/1000).toFixed(2)}] 🔍 tracking...`, 'track');
+    // Only open an attempt when the ball is actually approaching the hoop:
+    // recent trail must show downward motion (cy increasing) across the last
+    // few samples. Prevents held/dribbled balls from opening phantom attempts.
+    const tail = recent.slice(-4);
+    const dyMin = ATTEMPT_MIN_DOWNWARD_DY_NORM * overlay.height;
+    const approaching = tail.length >= 3 && (tail[tail.length - 1].cy - tail[0].cy) > dyMin;
+    if (approaching) {
+      shotAttempt = { startTs: now, ballBelowCenter: false, peakRim: 0 };
+      log(`[${(now/1000).toFixed(2)}] 🔍 tracking...`, 'track');
+    }
   }
 
   if (shotAttempt) {
@@ -500,7 +518,8 @@ function classifyShotAttempt(attempt, now) {
     return true;
   }
 
-  // SECONDARY: Ball tracking through center
+  // SECONDARY: ball tracking through center (catches silent-net swishes that
+  // don't spike the rim-diff signal).
   if (attempt.ballBelowCenter) return true;
 
   return false;
@@ -532,7 +551,12 @@ function checkBallLostMiss(now) {
 // ── BACKGROUND-SUBTRACTION COLOR DETECTION ──
 const COLOR_W = 360, COLOR_H = 320;
 let bgMask = null, bgAccum = null, bgBuildCount = 0;
+let prevColorFrame = null;   // last downsampled frame, for motion gating
 const BG_FRAMES_NEEDED = 8;
+// Sum of |dR|+|dG|+|dB| per pixel must exceed this to count as "moving".
+// Rejects static tan/orange objects (skin, court, cones, drawn UI).
+// Kept low enough that ball-at-arc-peak still passes (slow motion).
+const MOTION_DIFF_THRESHOLD = 12;
 
 function buildBackgroundFrame(vid) {
   if (!hoop) return;
@@ -555,7 +579,7 @@ function buildBackgroundFrame(vid) {
   }
 }
 
-function resetBackground() { bgMask = null; bgAccum = null; bgBuildCount = 0; }
+function resetBackground() { bgMask = null; bgAccum = null; bgBuildCount = 0; prevColorFrame = null; }
 
 function detectBallByColor(vid) {
   if (!hoop) return null;
@@ -566,14 +590,26 @@ function detectBallByColor(vid) {
   motionCtx.drawImage(vid, 0, 0, vid.videoWidth, scanH, 0, 0, COLOR_W, COLOR_H);
   const data = motionCtx.getImageData(0, 0, COLOR_W, COLOR_H).data;
 
+  // Motion-gate: only count ball-colored pixels that ALSO changed appreciably
+  // from the previous frame. Static orange/tan objects (skin, court lines,
+  // drawn UI overlay) no longer slip through.
+  const havePrev = prevColorFrame !== null;
   const newPx = [];
   for (let y = 0; y < COLOR_H; y++)
     for (let x = 0; x < COLOR_W; x++) {
       const idx = y * COLOR_W + x;
       if (bgMask[idx]) continue;
       const i = idx * 4;
-      if (isBallColor(data[i], data[i+1], data[i+2])) newPx.push(x, y);
+      if (!isBallColor(data[i], data[i+1], data[i+2])) continue;
+      if (havePrev) {
+        const dSum = Math.abs(data[i]   - prevColorFrame[i]) +
+                     Math.abs(data[i+1] - prevColorFrame[i+1]) +
+                     Math.abs(data[i+2] - prevColorFrame[i+2]);
+        if (dSum < MOTION_DIFF_THRESHOLD) continue;
+      }
+      newPx.push(x, y);
     }
+  prevColorFrame = new Uint8ClampedArray(data);
   if (newPx.length < 6) return null;
 
   // Grid-based clustering
@@ -690,6 +726,20 @@ function checkDisruptionMake(now) {
   const peakScore = Math.max(...recent.map(s => s.score));
   if (peakScore > 20) return;
 
+  // Gate: a disruption-only make requires a recent ball observation near the
+  // hoop. Without this, shadows / people / wind-moved nets trip the detector.
+  const hx = hoop.nx * overlay.width;
+  const hy = hoop.ny * overlay.height;
+  const hr = HOOP_R_NORM * overlay.width;
+  const radiusLimit = hr * DISRUPT_BALL_RADIUS_MULT;
+  const ballNearHoop = ballHistory.some(p => {
+    if (now - p.ts > DISRUPT_BALL_RECENCY_MS) return false;
+    const ddx = p.cx - hx;
+    const ddy = p.cy - hy;
+    return (ddx * ddx + ddy * ddy) < (radiusLimit * radiusLimit);
+  });
+  if (!ballNearHoop) return;
+
   const baseline = rimScores.filter(s => now - s.ts > 1500 && now - s.ts < 5000);
   const baseAvg = baseline.length > 2
     ? baseline.reduce((s, v) => s + v.score, 0) / baseline.length
@@ -706,7 +756,7 @@ function checkDisruptionMake(now) {
     lastAutoTs = now;
     if (shotAttempt) shotAttempt = null;
     shots.push({ made: true, ts: now, auto: true, method: 'disruption' });
-    log(`[${(now / 1000).toFixed(2)}] ✅ MAKE (rim=${peakScore.toFixed(1)} net=${peakNet.toFixed(1)} base=${baseAvg.toFixed(1)} thr=${dynThreshold.toFixed(1)})`, 'make');
+    log(`[${(now / 1000).toFixed(2)}] ✅ MAKE (rim=${peakScore.toFixed(1)} base=${baseAvg.toFixed(1)} thr=${dynThreshold.toFixed(1)})`, 'make');
   }
 }
 

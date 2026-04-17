@@ -34,4 +34,9 @@ enum DetectionConstants {
     static let colorH = 320
     static let bgFramesNeeded = 8
     static let bgStaticFractionThreshold = 0.4
+    // Motion gating: sum of |dR|+|dG|+|dB| for a pixel vs the previous downsampled
+    // frame must exceed this to count as "moving". Rejects static orange/tan
+    // objects (skin, court lines, cones, drawn UI) that the color rules alone
+    // would false-positive on. Low enough that ball-at-arc-peak still passes.
+    static let colorMotionDiffThreshold = 12
 }

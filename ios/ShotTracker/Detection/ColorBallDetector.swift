@@ -21,6 +21,9 @@ final class ColorBallDetector {
     private var bgAccum: [UInt16]?
     private var bgMask: [UInt8]?
     private var bgFramesBuilt = 0
+    /// Previous downsampled frame. Used for per-pixel motion gating so that
+    /// static orange/tan regions don't generate ball detections.
+    private var prevFrame: [UInt8]?
 
     var isMaskReady: Bool { bgMask != nil }
 
@@ -28,6 +31,7 @@ final class ColorBallDetector {
         bgAccum = nil
         bgMask = nil
         bgFramesBuilt = 0
+        prevFrame = nil
     }
 
     /// Run one detection tick. Caller is expected to throttle (e.g. every 3rd frame).
@@ -93,7 +97,10 @@ final class ColorBallDetector {
 
     private func findBall(pixels: [UInt8], scanFraction: CGFloat, timestampMs: Double) -> DetectedBall? {
         guard let mask = bgMask else { return nil }
-        // Collect ball-colored pixels that aren't in the static background mask.
+        // Collect ball-colored pixels that aren't in the static background mask
+        // AND that moved appreciably vs. the previous frame (motion gating).
+        let havePrev = prevFrame != nil
+        let motionThr = DetectionConstants.colorMotionDiffThreshold
         var pts = [UInt16]()      // flat (x, y) pairs for speed
         pts.reserveCapacity(512)
         for y in 0..<h {
@@ -102,12 +109,18 @@ final class ColorBallDetector {
                 let maskIdx = rowBase + x
                 if mask[maskIdx] != 0 { continue }
                 let i = maskIdx * 4
-                if Self.isBallColor(r: pixels[i], g: pixels[i + 1], b: pixels[i + 2]) {
-                    pts.append(UInt16(x))
-                    pts.append(UInt16(y))
+                if !Self.isBallColor(r: pixels[i], g: pixels[i + 1], b: pixels[i + 2]) { continue }
+                if havePrev, let prev = prevFrame {
+                    let dr = abs(Int(pixels[i])     - Int(prev[i]))
+                    let dg = abs(Int(pixels[i + 1]) - Int(prev[i + 1]))
+                    let db = abs(Int(pixels[i + 2]) - Int(prev[i + 2]))
+                    if dr + dg + db < motionThr { continue }
                 }
+                pts.append(UInt16(x))
+                pts.append(UInt16(y))
             }
         }
+        prevFrame = pixels
         if pts.count < 6 { return nil }  // need at least 3 points
 
         // Grid cluster with 10-px cells.
