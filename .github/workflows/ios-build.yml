@@ -28,7 +28,7 @@ env:
   XCODE_VERSION: "15.4"
   SCHEME: ShotTracker
   CONFIGURATION: Release
-  BUNDLE_ID: com.lorenzoleo.shottracker
+  BUNDLE_ID: com.basketballtracker.app
 
 jobs:
   build:

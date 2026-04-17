@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(openssl version *)",
+      "Read(//c/Users/fines/shottracker-signing//**)",
+      "Read(//c/Users/fines/Downloads//**)",
+      "Read(//c/Users/fines/shottracker-signing/**)",
+      "Bash(xxd distribution.cer)"
+    ]
+  }
+}
