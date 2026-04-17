@@ -12,7 +12,7 @@ concurrency:
 env:
   SCHEME: ShotTracker
   CONFIGURATION: Release
-  BUNDLE_ID: com.basketballtracker.app
+  BUNDLE_ID: com.aishottracker.app
 
 jobs:
   testflight:
