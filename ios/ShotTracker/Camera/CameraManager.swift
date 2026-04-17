@@ -11,9 +11,19 @@ final class CameraManager: ObservableObject {
     let session = AVCaptureSession()
     private let videoOutput = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "shottracker.camera.session")
+    private let frameQueue = DispatchQueue(label: "shottracker.camera.frames", qos: .userInitiated)
 
     @Published private(set) var isAuthorized = false
     @Published private(set) var isConfigured = false
+
+    private var frameDelegate: AVCaptureVideoDataOutputSampleBufferDelegate?
+
+    /// Install a frame-buffer delegate. Typically called once with FrameProcessor
+    /// before `configure()`.
+    func setFrameDelegate(_ delegate: AVCaptureVideoDataOutputSampleBufferDelegate) {
+        self.frameDelegate = delegate
+        videoOutput.setSampleBufferDelegate(delegate, queue: frameQueue)
+    }
 
     @MainActor
     func requestAuthorization() async -> Bool {
@@ -83,6 +93,9 @@ final class CameraManager: ObservableObject {
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ]
         videoOutput.alwaysDiscardsLateVideoFrames = true
+        if let frameDelegate {
+            videoOutput.setSampleBufferDelegate(frameDelegate, queue: frameQueue)
+        }
         guard session.canAddOutput(videoOutput) else { throw CameraError.inputFailed }
         session.addOutput(videoOutput)
 
