@@ -52,7 +52,7 @@ final class ShotClassifier {
     func tick(nowMs: Double, hoop: CGPoint?, rimScores: [RimScore]) -> ShotOutcome? {
         guard let hoop else { return nil }
 
-        if let outcome = checkDisruptionMake(nowMs: nowMs, rimScores: rimScores) {
+        if let outcome = checkDisruptionMake(nowMs: nowMs, hoop: hoop, rimScores: rimScores) {
             return outcome
         }
         if let outcome = checkMake(nowMs: nowMs, hoop: hoop, rimScores: rimScores) {
@@ -73,7 +73,7 @@ final class ShotClassifier {
 
     // MARK: - Make: direct rim disruption
 
-    private func checkDisruptionMake(nowMs: Double, rimScores: [RimScore]) -> ShotOutcome? {
+    private func checkDisruptionMake(nowMs: Double, hoop: CGPoint, rimScores: [RimScore]) -> ShotOutcome? {
         if nowMs - lastAutoTsMs < DetectionConstants.cooldownMs { return nil }
         if nowMs - lastDisruptMakeTsMs < DetectionConstants.disruptCooldownMs { return nil }
         if rimScores.count < 5 { return nil }
@@ -82,6 +82,21 @@ final class ShotClassifier {
         if recent.count < 2 { return nil }
         let peak = recent.map(\.score).max() ?? 0
         if peak > 20 { return nil }  // person near hoop, not a shot
+
+        // Gate: a disruption-only make requires a recent ball observation near
+        // the hoop. Without this, shadows / people / wind-moved nets trip the
+        // detector outdoors.
+        let hr = CGFloat(DetectionConstants.hoopRadiusNormalized)
+        let ballRecencyS = DetectionConstants.disruptBallRecencyMs / 1000.0
+        let radiusLimit = hr * CGFloat(DetectionConstants.disruptBallRadiusMult)
+        let nowS = nowMs / 1000.0
+        let ballNearHoop = trail.contains { sample in
+            guard nowS - sample.timestamp < ballRecencyS else { return false }
+            let ddx = sample.position.x - hoop.x
+            let ddy = sample.position.y - hoop.y
+            return (ddx * ddx + ddy * ddy) < (radiusLimit * radiusLimit)
+        }
+        if !ballNearHoop { return nil }
 
         let baseline = rimScores.filter { nowMs - $0.timestampMs > 1500 && nowMs - $0.timestampMs < 4500 }
         let baseAvg: Double = baseline.count > 2
@@ -120,7 +135,20 @@ final class ShotClassifier {
             dy < hr * 3 &&
             dy > -CGFloat(DetectionConstants.shotZoneAbove)
 
-        if inShotZone && shotAttempt == nil {
+        // Only open an attempt when the ball is actually approaching the hoop:
+        // recent trail must show downward motion (y increasing) across the last
+        // few samples. Prevents held/dribbled balls under the rim from opening
+        // phantom attempts.
+        let approaching: Bool = {
+            let tail = recent.suffix(4)
+            guard tail.count >= 3 else { return false }
+            let first = tail.first!
+            let last = tail.last!
+            let dyTrail = last.position.y - first.position.y
+            return dyTrail > DetectionConstants.attemptMinDownwardDy
+        }()
+
+        if inShotZone && approaching && shotAttempt == nil {
             shotAttempt = Attempt(startTsMs: nowMs)
         }
 

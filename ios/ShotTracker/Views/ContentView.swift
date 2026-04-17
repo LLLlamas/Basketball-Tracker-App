@@ -11,18 +11,16 @@ struct ContentView: View {
     @State private var showResetConfirm = false
 
     var body: some View {
-        GeometryReader { _ in
-            ZStack {
-                Color.black.ignoresSafeArea()
+        ZStack {
+            Color.black.ignoresSafeArea()
 
-                if camera.isAuthorized {
-                    // Camera + overlays fill the screen; UI chrome sits on top.
-                    cameraStack
-                    chromeOverlay
-                } else {
-                    PermissionView(denied: permissionDenied) {
-                        Task { await requestAccess() }
-                    }
+            if camera.isAuthorized {
+                // Camera + overlays fill the screen; UI chrome sits on top.
+                cameraStack
+                chromeOverlay
+            } else {
+                PermissionView(denied: permissionDenied) {
+                    Task { await requestAccess() }
                 }
             }
         }
@@ -48,9 +46,17 @@ struct ContentView: View {
     private var cameraStack: some View {
         ZStack {
             CameraPreview(session: camera.session)
+                .overlay(
+                    // Inner GeometryReader sits inside the expanded (ignoresSafeArea)
+                    // camera view, so its proxy.size exactly matches the coordinate
+                    // space of taps — ensuring hoop placement lands where the user tapped.
+                    GeometryReader { innerProxy in
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .gesture(hoopPlacementTap(viewSize: innerProxy.size))
+                    }
+                )
                 .ignoresSafeArea()
-                .contentShape(Rectangle())
-                .gesture(hoopPlacementTap)
 
             HoopOverlay(session: session)
                 .ignoresSafeArea()
@@ -103,13 +109,13 @@ struct ContentView: View {
 
     /// Normalized tap within the camera preview view (0...1 of its own bounds).
     /// Used as both the detection-space hoop point and the overlay draw point.
-    private var hoopPlacementTap: some Gesture {
+    private func hoopPlacementTap(viewSize: CGSize) -> some Gesture {
         SpatialTapGesture()
             .onEnded { event in
                 guard session.hoopPlacementActive else { return }
-                let bounds = UIScreen.main.bounds
-                let nx = max(0, min(1, event.location.x / bounds.width))
-                let ny = max(0, min(1, event.location.y / bounds.height))
+                guard viewSize.width > 0, viewSize.height > 0 else { return }
+                let nx = max(0, min(1, event.location.x / viewSize.width))
+                let ny = max(0, min(1, event.location.y / viewSize.height))
                 session.placeHoop(CGPoint(x: nx, y: ny))
             }
     }
