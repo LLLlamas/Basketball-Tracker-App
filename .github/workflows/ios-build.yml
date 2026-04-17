@@ -51,7 +51,12 @@ jobs:
 
       - name: Generate Xcode project
         working-directory: ios
-        run: xcodegen generate
+        run: |
+          xcodegen version
+          xcodegen generate --spec project.yml
+          echo "--- generated contents ---"
+          ls -la
+          test -d ShotTracker.xcodeproj || { echo "::error::xcodegen did not produce ShotTracker.xcodeproj"; exit 1; }
 
       - name: Build (no signing)
         working-directory: ios
