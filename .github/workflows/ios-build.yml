@@ -50,13 +50,22 @@ jobs:
 
       - name: Install tooling
         working-directory: .
-        run: brew install xcodegen librsvg xcbeautify
+        run: brew install xcodegen librsvg xcbeautify imagemagick
 
       - name: Generate app icon from SVG
+        # App Store rejects PNGs with an alpha channel, even a fully-opaque one.
+        # rsvg-convert always writes RGBA, so we post-process with ImageMagick:
+        # flatten onto the icon's dark background color and strip the alpha
+        # channel. iOS auto-rounds corners on display, so the dark-square PNG
+        # appears identical to the original rounded SVG on the home screen.
         working-directory: .
         run: |
-          rsvg-convert -w 1024 -h 1024 icons/icon.svg \
-            -o ios/ShotTracker/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png
+          rsvg-convert -w 1024 -h 1024 -b "#08080f" icons/icon.svg -o /tmp/icon-rgba.png
+          magick /tmp/icon-rgba.png -background "#08080f" -alpha remove -alpha off \
+            ios/ShotTracker/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png
+          echo "--- final icon metadata ---"
+          magick identify -format "format=%m channels=%[channels] depth=%z alpha=%A\n" \
+            ios/ShotTracker/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png
 
       - name: Generate Xcode project
         run: |
